@@ -114,6 +114,35 @@
 - Token-based bundle size estimation (requires SDK capabilities field)
 - Live Copilot call testing (structural validation only in build phase)
 
+### [test] Phase Summary (rounds 1-5, accepted)
+
+#### Key Decisions
+- D-1: Added 36 new tests (118 → 154) covering MCP handlers, health endpoint, Copilot error classification, zero-findings edge case
+- D-2: Coverage improved from 78% → 91% (715 stmts, 68 missed)
+- D-3: MCP tool contract (mcp-tools.md) updated to document all Copilot error codes identically for start_review and discuss
+- D-4: `internal` error's `retryable` field documented as variable (reflects original exception's flag, defaults to false)
+- D-5: discuss() handler now classifies all 4 Copilot error types identically to start_review (auth, unavailable, timeout, rate_limited)
+- D-6: Zero-findings sessions correctly set to RESOLVED status
+
+#### Findings Resolved
+- H-1 (R1): MCP handler gap — added test_mcp_handlers.py (20 tests) and test_health.py (3 tests)
+- M-1 (R1): MCP lifespan not tested — acknowledged, low-risk
+- H-1 (R2): discuss() missing auth/unavailable error classification — added parity with start_review
+- M-1 (R2): Zero-findings session status wrong — fixed parser and engine
+- M-1 (R3): MCP contract missing discuss error codes — added auth_failed/unavailable/rate_limited/unknown/internal
+- M-1 (R4): Contract undocumented unknown/internal/session_not_found — added all error payloads
+- M-1 (R5): internal.retryable mismatch — updated contract to document variable behavior
+
+#### Artifacts Produced
+- tests/test_mcp_handlers.py — 21 MCP handler integration tests
+- tests/test_health.py — 3 FastAPI health endpoint tests
+- 12 additional tests in existing test files
+- specs/001-ai-code-reviewer/contracts/mcp-tools.md — complete error surface documented
+
+#### Deferred / Out of Scope
+- Live Copilot integration testing (structural validation only)
+- Bundle size limit character-vs-token (character-based for MVP)
+
 ---
 
 ## Raw Archived Rounds
@@ -572,35 +601,6 @@ Updated MCP tool contract (mcp-tools.md) to document all Copilot error codes. Ad
 #### Context Management
 
 Phase compaction: design (5 rounds), plan (4 rounds), build (7 rounds) compacted to builder-archive.md. Within-phase round archival: test round 1 archived.
-
-### [test] Phase Summary (rounds 1-5, accepted)
-
-#### Key Decisions
-- D-1: Added 36 new tests (118 → 154) covering MCP handlers, health endpoint, Copilot error classification, zero-findings edge case
-- D-2: Coverage improved from 78% → 91% (715 stmts, 68 missed)
-- D-3: MCP tool contract (mcp-tools.md) updated to document all Copilot error codes identically for start_review and discuss
-- D-4: `internal` error's `retryable` field documented as variable (reflects original exception's flag, defaults to false)
-- D-5: discuss() handler now classifies all 4 Copilot error types identically to start_review (auth, unavailable, timeout, rate_limited)
-- D-6: Zero-findings sessions correctly set to RESOLVED status
-
-#### Findings Resolved
-- H-1 (R1): MCP handler gap — added test_mcp_handlers.py (20 tests) and test_health.py (3 tests)
-- M-1 (R1): MCP lifespan not tested — acknowledged, low-risk
-- H-1 (R2): discuss() missing auth/unavailable error classification — added parity with start_review
-- M-1 (R2): Zero-findings session status wrong — fixed parser and engine
-- M-1 (R3): MCP contract missing discuss error codes — added auth_failed/unavailable/rate_limited/unknown/internal
-- M-1 (R4): Contract undocumented unknown/internal/session_not_found — added all error payloads
-- M-1 (R5): internal.retryable mismatch — updated contract to document variable behavior
-
-#### Artifacts Produced
-- tests/test_mcp_handlers.py — 21 MCP handler integration tests
-- tests/test_health.py — 3 FastAPI health endpoint tests
-- 12 additional tests in existing test files
-- specs/001-ai-code-reviewer/contracts/mcp-tools.md — complete error surface documented
-
-#### Deferred / Out of Scope
-- Live Copilot integration testing (structural validation only)
-- Bundle size limit character-vs-token (character-based for MVP)
 
 ### [test] Rounds 2-5 (raw)
 

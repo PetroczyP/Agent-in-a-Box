@@ -226,7 +226,10 @@ class ReviewEngine:
         prompt_parts = [request.message]
         if request.additional_files:
             for path, content in sorted(request.additional_files.items()):
-                prompt_parts.append(f"\n### {path}\n```\n{content}\n```")
+                fence = "```"
+                while fence in content:
+                    fence += "`"
+                prompt_parts.append(f"\n### {path}\n{fence}\n{content}\n{fence}")
         prompt = "\n".join(prompt_parts)
 
         # Step 5: Send to Copilot

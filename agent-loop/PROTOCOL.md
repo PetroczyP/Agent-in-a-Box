@@ -273,7 +273,7 @@ For low-risk tasks (docs updates, isolated test additions, small bug fixes that 
 ## Builder Output Format
 
 ```markdown
-## Round N
+## Round N — [phase]
 
 ### Summary
 - ...
@@ -310,7 +310,7 @@ Rules:
 ## Judge Output Format
 
 ```markdown
-## Round N
+## Round N — [phase]
 
 ### Verdict
 accepted | needs_revision | escalated

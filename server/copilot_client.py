@@ -82,6 +82,8 @@ class CopilotReviewClient:
         self._startup_error = None  # Clear any previous startup error
         await self._init_sdk()
         self._connected = self._sdk_client is not None
+        if self._connected:
+            await self.select_model()
 
     async def stop(self) -> None:
         """Graceful shutdown."""
@@ -103,11 +105,12 @@ class CopilotReviewClient:
 
     async def select_model(self, model_id: str | None = None) -> str:
         """Select model by ID or auto-select best available."""
+        available_ids = {m["id"] for m in self._available_models}
         if model_id:
+            if model_id not in available_ids:
+                raise CopilotUnavailableError(f"Model {model_id} is not available")
             self._selected_model = model_id
             return model_id
-
-        available_ids = {m["id"] for m in self._available_models}
         for preferred in MODEL_PREFERENCE:
             if preferred in available_ids:
                 self._selected_model = preferred
