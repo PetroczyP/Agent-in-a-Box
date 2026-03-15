@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **AgentinaBox** is a Dockerized AI code review sidecar. It receives code via MCP tool calls, forwards it to GitHub Copilot (via the Copilot SDK), and returns SARIF-structured findings. It is project-agnostic — it knows nothing about the repo it reviews until the orchestrating agent tells it.
 
-The project is currently in **spec/planning phase** — no implementation code exists yet.
+The project is in **active development**. Spec 001 (Core Review Server) is implemented on branch `001-ai-code-reviewer`.
 
 ## Architecture
 

@@ -11,7 +11,13 @@ from contextlib import asynccontextmanager
 
 from mcp.server.fastmcp import FastMCP
 
-from server.copilot_client import CopilotReviewClient
+from server.copilot_client import (
+    CopilotAuthError,
+    CopilotRateLimitError,
+    CopilotReviewClient,
+    CopilotTimeoutError,
+    CopilotUnavailableError,
+)
 from server.denylist import ContentDenylist
 from server.models import (
     DiscussRequest,
@@ -113,17 +119,16 @@ async def start_review(
         if "idempotency_conflict" in msg:
             return {"error": "idempotency_conflict", "message": msg, "retryable": False}
         return {"error": "unknown", "message": msg, "retryable": False}
+    except CopilotAuthError as e:
+        return {"error": "auth_failed", "message": str(e), "retryable": False}
+    except CopilotUnavailableError as e:
+        return {"error": "unavailable", "message": str(e), "retryable": False}
+    except CopilotTimeoutError as e:
+        return {"error": "timeout", "message": str(e), "retryable": True}
+    except CopilotRateLimitError as e:
+        return {"error": "rate_limited", "message": str(e), "retryable": True}
     except Exception as e:
         retryable = getattr(e, "retryable", False)
-        error_type = type(e).__name__
-        if "Auth" in error_type:
-            return {"error": "auth_failed", "message": str(e), "retryable": False}
-        if "Unavailable" in error_type:
-            return {"error": "unavailable", "message": str(e), "retryable": False}
-        if "Timeout" in error_type:
-            return {"error": "timeout", "message": str(e), "retryable": True}
-        if "RateLimit" in error_type:
-            return {"error": "rate_limited", "message": str(e), "retryable": True}
         return {"error": "internal", "message": str(e), "retryable": retryable}
 
 
@@ -159,17 +164,16 @@ async def discuss(
         if "idempotency_conflict" in msg:
             return {"error": "idempotency_conflict", "message": msg, "retryable": False}
         return {"error": "unknown", "message": msg, "retryable": False}
+    except CopilotAuthError as e:
+        return {"error": "auth_failed", "message": str(e), "retryable": False}
+    except CopilotUnavailableError as e:
+        return {"error": "unavailable", "message": str(e), "retryable": False}
+    except CopilotTimeoutError as e:
+        return {"error": "timeout", "message": str(e), "retryable": True}
+    except CopilotRateLimitError as e:
+        return {"error": "rate_limited", "message": str(e), "retryable": True}
     except Exception as e:
         retryable = getattr(e, "retryable", False)
-        error_type = type(e).__name__
-        if "Auth" in error_type:
-            return {"error": "auth_failed", "message": str(e), "retryable": False}
-        if "Unavailable" in error_type:
-            return {"error": "unavailable", "message": str(e), "retryable": False}
-        if "Timeout" in error_type:
-            return {"error": "timeout", "message": str(e), "retryable": True}
-        if "RateLimit" in error_type:
-            return {"error": "rate_limited", "message": str(e), "retryable": True}
         return {"error": "internal", "message": str(e), "retryable": retryable}
 
 
