@@ -203,10 +203,8 @@ class ReviewEngine:
         session = self._store.get(request.session_id)
         if session is None:
             raise ValueError("session_not_found")
-        if session.status != SessionStatus.ACTIVE:
-            raise ValueError("session_not_active")
 
-        # Step 2: Idempotency check
+        # Step 2: Idempotency check (before status guard so cached results work for resolved sessions)
         if request.idempotency_token:
             key = f"discuss:{request.session_id}:{request.idempotency_token}"
             existing = self._store.get_idempotency_record(key)
@@ -214,6 +212,9 @@ class ReviewEngine:
                 return DiscussResult.model_validate_json(existing.result_snapshot)
             if self._store.token_exists_elsewhere(request.idempotency_token, key):
                 raise ValueError("idempotency_conflict: Token already used for a different request")
+
+        if session.status != SessionStatus.ACTIVE:
+            raise ValueError("session_not_active")
 
         # Step 3: Validate additional files against denylist (FR-007)
         if request.additional_files:
@@ -264,6 +265,8 @@ class ReviewEngine:
             )
         )
         session.findings = reconciled
+        if all(f.status != FindingStatus.OPEN for f in reconciled):
+            session.status = SessionStatus.RESOLVED
         session.updated_at = datetime.now(timezone.utc)
         self._store.save(session)
 

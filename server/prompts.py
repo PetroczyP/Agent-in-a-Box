@@ -54,6 +54,14 @@ Classify each finding into exactly one category:
 """
 
 
+def _fence(content: str, language: str = "") -> str:
+    """Build a fenced code block with dynamic delimiter to avoid conflicts."""
+    fence = "```"
+    while fence in content:
+        fence += "`"
+    return f"{fence}{language}\n{content}\n{fence}"
+
+
 def build_review_context(
     *,
     conventions: str | None = None,
@@ -80,22 +88,22 @@ def build_review_context(
     if spec:
         sections.append(f"## Spec Artifacts\n\n{spec}")
 
-    sections.append(f"## Git Diff\n\n```diff\n{diff}\n```")
+    sections.append(f"## Git Diff\n\n{_fence(diff, 'diff')}")
 
     if files:
         file_section = "## Changed Files\n"
         for path, content in sorted(files.items()):
-            file_section += f"\n### {path}\n```\n{content}\n```\n"
+            file_section += f"\n### {path}\n{_fence(content)}\n"
         sections.append(file_section)
 
     if test_files:
         test_section = "## Test Files\n"
         for path, content in sorted(test_files.items()):
-            test_section += f"\n### {path}\n```\n{content}\n```\n"
+            test_section += f"\n### {path}\n{_fence(content)}\n"
         sections.append(test_section)
 
     if test_results:
-        sections.append(f"## Test Results\n\n```\n{test_results}\n```")
+        sections.append(f"## Test Results\n\n{_fence(test_results)}")
 
     if context:
         sections.append(f"## Additional Context\n\n{context}")

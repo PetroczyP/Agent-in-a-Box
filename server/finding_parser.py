@@ -58,8 +58,10 @@ class FindingParser:
         start_id: int,
     ) -> list[Finding] | None:
         """Try to parse JSON findings from response."""
-        # Extract JSON from code fences if present
-        json_match = re.search(r"```(?:json)?\s*\n?(.*?)\n?```", text, re.DOTALL)
+        # Extract JSON from code fences — prefer json-tagged fences first
+        json_match = re.search(r"```json\s*\n?(.*?)\n?```", text, re.DOTALL)
+        if not json_match:
+            json_match = re.search(r"```\s*\n?(.*?)\n?```", text, re.DOTALL)
         json_str = json_match.group(1).strip() if json_match else text.strip()
 
         try:

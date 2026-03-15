@@ -173,8 +173,8 @@ class CopilotReviewClient:
                 return await self._send_with_events(session, prompt, timeout)
             else:
                 raise CopilotUnavailableError("Session has no send method")
-        except TimeoutError:
-            raise CopilotTimeoutError(f"Review timed out after {timeout}s")
+        except TimeoutError as e:
+            raise CopilotTimeoutError(f"Review timed out after {timeout}s") from e
 
     async def send_followup(
         self,

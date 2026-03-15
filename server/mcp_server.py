@@ -24,6 +24,7 @@ from server.models import (
     ReviewBundle,
     SummaryRequest,
 )
+from pydantic import ValidationError
 from server.review_engine import BundleTooLargeError, ContentDeniedError, ReviewEngine
 from server.store import SessionStore
 
@@ -86,22 +87,24 @@ async def start_review(
     deterministically, and forwards to GitHub Copilot for review.
     Returns SARIF-structured findings.
     """
-    bundle = ReviewBundle(
-        diff=diff,
-        files=files,
-        test_files=test_files,
-        spec=spec,
-        conventions=conventions,
-        anti_patterns=anti_patterns,
-        test_results=test_results,
-        context=context,
-        branch=branch,
-        model=model,
-        idempotency_token=idempotency_token,
-    )
     try:
+        bundle = ReviewBundle(
+            diff=diff,
+            files=files,
+            test_files=test_files,
+            spec=spec,
+            conventions=conventions,
+            anti_patterns=anti_patterns,
+            test_results=test_results,
+            context=context,
+            branch=branch,
+            model=model,
+            idempotency_token=idempotency_token,
+        )
         result = await _engine.start_review(bundle)
         return result.model_dump()
+    except ValidationError as e:
+        return {"error": "invalid_request", "message": str(e), "retryable": False}
     except ContentDeniedError as e:
         return {"error": "content_denied", "denied_files": e.denied_files, "retryable": False}
     except BundleTooLargeError as e:
@@ -144,15 +147,17 @@ async def discuss(
     Supports rebuttals referencing finding IDs, additional file attachments,
     and multi-turn discussion with the reviewer.
     """
-    request = DiscussRequest(
-        session_id=session_id,
-        message=message,
-        additional_files=additional_files,
-        idempotency_token=idempotency_token,
-    )
     try:
+        request = DiscussRequest(
+            session_id=session_id,
+            message=message,
+            additional_files=additional_files,
+            idempotency_token=idempotency_token,
+        )
         result = await _engine.discuss(request)
         return result.model_dump()
+    except ValidationError as e:
+        return {"error": "invalid_request", "message": str(e), "retryable": False}
     except ContentDeniedError as e:
         return {"error": "content_denied", "denied_files": e.denied_files, "retryable": False}
     except ValueError as e:
@@ -183,10 +188,12 @@ async def get_review_summary(session_id: str) -> dict:
 
     Returns finding counts by severity, category, and status.
     """
-    request = SummaryRequest(session_id=session_id)
     try:
+        request = SummaryRequest(session_id=session_id)
         result = await _engine.get_summary(request.session_id)
         return result.model_dump()
+    except ValidationError as e:
+        return {"error": "invalid_request", "message": str(e), "retryable": False}
     except ValueError as e:
         msg = str(e)
         if "session_not_found" in msg:
