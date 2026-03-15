@@ -1,4 +1,4 @@
-# AgentinaBox
+# Agent-in-a-Box (AgentinaBox)
 
 A Dockerized AI code review sidecar. It receives code via [MCP](https://modelcontextprotocol.io/) tool calls, forwards it to GitHub Copilot (via the Copilot SDK), and returns SARIF-structured findings.
 
@@ -40,11 +40,13 @@ Add to your MCP config:
   "mcpServers": {
     "code-reviewer": {
       "command": "docker",
-      "args": ["exec", "-i", "agent-in-a-box-review-server-1", "python", "-m", "server.mcp_server"]
+      "args": ["exec", "-i", "<container-name>", "python", "-m", "server.mcp_server"]
     }
   }
 }
 ```
+
+> Replace `<container-name>` with the actual name (`docker compose ps --format '{{.Name}}'`). Default: `agent-in-a-box-review-server-1`.
 
 ## MCP Tools
 
@@ -64,7 +66,7 @@ Add to your MCP config:
 | MCP SDK | `mcp` (Anthropic FastMCP) |
 | Inner model | GitHub Copilot SDK (Technical Preview) |
 | Templates | Jinja2 (server-rendered) |
-| Testing | pytest (154 tests, 91% coverage) |
+| Testing | pytest |
 | Container | Docker Compose |
 
 ## Development
