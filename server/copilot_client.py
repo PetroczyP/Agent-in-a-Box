@@ -175,8 +175,6 @@ class CopilotReviewClient:
                 raise CopilotUnavailableError("Session has no send method")
         except TimeoutError:
             raise CopilotTimeoutError(f"Review timed out after {timeout}s")
-        except asyncio.TimeoutError:
-            raise CopilotTimeoutError(f"Review timed out after {timeout}s")
 
     async def send_followup(
         self,
