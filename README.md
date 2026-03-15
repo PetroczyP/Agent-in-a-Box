@@ -6,7 +6,7 @@ A Dockerized AI code review sidecar. It receives code via [MCP](https://modelcon
 
 ## Architecture
 
-```
+```text
 Claude Code  ──MCP stdio──▶  Agent-in-a-Box container  ──SDK──▶  GitHub Copilot
                               (no host filesystem access)
 ```
