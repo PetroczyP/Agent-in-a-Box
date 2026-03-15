@@ -1,0 +1,14 @@
+.git/
+__pycache__/
+*.pyc
+.env
+specs/
+agent-loop/
+.specify/
+.claude/
+.venv/
+.pytest_cache/
+*.egg-info/
+dist/
+htmlcov/
+.coverage
