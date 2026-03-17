@@ -1,7 +1,7 @@
 """Finding parser — T014.
 
 Parses Copilot's text response into structured Finding objects.
-Strategy: JSON parse → regex fallback → NIT wrap fallback.
+Strategy: JSON parse → json-repair → regex fallback → NIT wrap fallback.
 Fingerprint: SHA-256 of rule_id + normalized code (research.md Decision 7).
 """
 
@@ -11,6 +11,8 @@ import hashlib
 import json
 import re
 from typing import Any
+
+from json_repair import repair_json
 
 from server.models import (
     Category,
@@ -43,6 +45,11 @@ class FindingParser:
         if findings is not None:
             return findings
 
+        # Try json-repair for truncated / malformed JSON
+        findings = self._try_json_repair(response_text, file_contents, start_id)
+        if findings is not None:
+            return findings
+
         # Try regex fallback
         findings = self._try_regex(response_text, file_contents, start_id)
         if findings is not None:
@@ -51,33 +58,187 @@ class FindingParser:
         # Last resort: wrap entire response as single NIT
         return self._wrap_as_nit(response_text, start_id)
 
+    # ── Trust model (output-contract approach) ───────────────────────
+    #
+    # Parsing invariant:
+    #
+    #   The parser trusts ONLY unambiguous shapes:
+    #
+    #   1. Code-fenced JSON (```json ... ```)  — explicit container
+    #   2. Sentinel-delimited JSON (BEGIN_FINDINGS_JSON ... END_FINDINGS_JSON)
+    #   3. Whole-response JSON (the entire text is a valid JSON array/object)
+    #
+    #   Bare JSON embedded in prose text is the AMBIGUOUS ZONE.  The
+    #   parser does NOT attempt to extract it.  Prose-embedded JSON
+    #   falls through to regex → NIT-wrap.
+    #
+    # Why fail closed in the ambiguous zone:
+    #
+    #   Rounds 10-15 proved that no heuristic (phrase lists, positional
+    #   rescue, comma context, content validation) can reliably
+    #   distinguish illustrative example JSON from actual findings in
+    #   prose.  The same prose patterns ("For example, ...", "Sample
+    #   payload: ...") can frame both real findings and format examples.
+    #
+    #   Error preference: false positives FABRICATE findings (phantom
+    #   bugs, phantom security issues).  False negatives merely
+    #   NIT-wrap the response, preserving the full text for human
+    #   review.  Fabricated findings are strictly worse.
+    #
+    #   The tuned prompt (REVIEWER_PERSONA + FORMAT_REINFORCEMENT)
+    #   produces code-fenced JSON 100% of the time in live validation.
+    #   The sentinel contract provides an additional unambiguous path.
+    #   Together they eliminate the need to infer intent from prose.
+    # ─────────────────────────────────────────────────────────────────
+
+    # Sentinel delimiters for machine-readable finding extraction.
+    # Added to FORMAT_REINFORCEMENT and DISCUSS_REINFORCEMENT so the
+    # prompt and parser share a contract.
+    _SENTINEL_BEGIN = "BEGIN_FINDINGS_JSON"
+    _SENTINEL_END = "END_FINDINGS_JSON"
+
     def _try_json(
         self,
         text: str,
         file_contents: dict[str, str],
         start_id: int,
     ) -> list[Finding] | None:
-        """Try to parse JSON findings from response."""
-        # Extract JSON from code fences — prefer json-tagged fences first
-        json_match = re.search(r"```json\s*\n?(.*?)\n?```", text, re.DOTALL)
-        if not json_match:
-            json_match = re.search(r"```\s*\n?(.*?)\n?```", text, re.DOTALL)
-        json_str = json_match.group(1).strip() if json_match else text.strip()
+        """Try to parse JSON findings from trusted containers.
 
+        Trusts: code-fenced JSON, sentinel-delimited JSON, whole-response
+        JSON.  Does NOT extract bare JSON from prose (ambiguous zone).
+        """
+        json_strings = self._extract_json_strings(text)
+
+        all_items: list[dict] = []
+        any_parsed = False
+        for json_str in json_strings:
+            items = self._parse_json_to_items(json_str)
+            if items is not None:
+                any_parsed = True
+                all_items.extend(items)
+
+        if not any_parsed:
+            return None
+
+        # Empty JSON array = valid "no findings" response
+        if len(all_items) == 0:
+            return []
+
+        findings = []
+        for i, item in enumerate(all_items):
+            finding = self._dict_to_finding(item, file_contents, start_id + i)
+            if finding:
+                findings.append(finding)
+
+        return findings if findings else None
+
+    def _extract_json_strings(self, text: str) -> list[str]:
+        """Extract JSON strings from trusted containers only.
+
+        Trust hierarchy:
+        1. Code-fenced blocks (```json ... ```) — highest priority
+        2. Sentinel-delimited blocks (BEGIN/END_FINDINGS_JSON)
+        3. Whole stripped text — handles bare JSON responses
+
+        Bare JSON embedded in prose (e.g., "Example: [{...}]") is NOT
+        extracted.  This is the ambiguous zone where illustrative and
+        real JSON cannot be distinguished.  Such responses fall through
+        to regex → NIT-wrap, which preserves the content without
+        fabricating findings.
+        """
+        # 1. Code-fenced blocks (highest priority)
+        fenced = re.findall(r"```(?:json)?\s*\n?(.*?)\n?```", text, re.DOTALL)
+        if fenced:
+            return [s.strip() for s in fenced]
+
+        # 2. Sentinel-delimited blocks
+        sentinel_pattern = re.compile(
+            rf"{re.escape(self._SENTINEL_BEGIN)}\s*\n?(.*?)\n?\s*{re.escape(self._SENTINEL_END)}",
+            re.DOTALL,
+        )
+        sentinel = sentinel_pattern.findall(text)
+        if sentinel:
+            return [s.strip() for s in sentinel]
+
+        # 3. Whole text as JSON (no container found)
+        stripped = text.strip()
+        if stripped:
+            return [stripped]
+
+        return []
+
+    def _parse_json_to_items(self, json_str: str) -> list[dict] | None:
+        """Parse a JSON string into a list of finding dicts.
+
+        Handles arrays directly and unwraps objects that contain a list value.
+        Returns None on parse failure, [] for valid empty arrays.
+        """
         try:
             data = json.loads(json_str)
         except (json.JSONDecodeError, ValueError):
             return None
 
-        if not isinstance(data, list):
+        return self._unwrap_to_list(data)
+
+    def _unwrap_to_list(self, data: Any) -> list[dict] | None:
+        """Convert parsed JSON data to a list of finding dicts.
+
+        - list → return directly
+        - dict with a list value → unwrap the first list value found
+        - anything else → None
+        """
+        if isinstance(data, list):
+            return data
+
+        if isinstance(data, dict):
+            # Find the first value that is a list (e.g. "findings", "results")
+            for value in data.values():
+                if isinstance(value, list):
+                    return value
+
+        return None
+
+    def _try_json_repair(
+        self,
+        text: str,
+        file_contents: dict[str, str],
+        start_id: int,
+    ) -> list[Finding] | None:
+        """Try to repair malformed JSON from trusted containers.
+
+        Same trust model as _try_json: only attempts repair on content
+        from code fences, sentinels, or whole-text that starts with
+        JSON syntax.  Does NOT repair prose-embedded text (that would
+        extract bare JSON from the ambiguous zone).
+        """
+        candidates = self._extract_repair_candidates(text)
+
+        all_items: list[dict] = []
+        any_repaired = False
+        for json_str in candidates:
+            if "[" not in json_str and "{" not in json_str:
+                continue
+            try:
+                repaired = repair_json(json_str, return_objects=True)
+            except Exception:
+                continue
+
+            items = self._unwrap_to_list(repaired)
+            if items is not None:
+                if len(items) == 0:
+                    continue
+                any_repaired = True
+                all_items.extend(items)
+
+        if not any_repaired:
             return None
 
-        # Empty JSON array = valid "no findings" response
-        if len(data) == 0:
+        if len(all_items) == 0:
             return []
 
         findings = []
-        for i, item in enumerate(data):
+        for i, item in enumerate(all_items):
             if not isinstance(item, dict):
                 continue
             finding = self._dict_to_finding(item, file_contents, start_id + i)
@@ -86,66 +247,202 @@ class FindingParser:
 
         return findings if findings else None
 
+    def _extract_repair_candidates(self, text: str) -> list[str]:
+        """Extract candidates for JSON repair from trusted containers.
+
+        Like _extract_json_strings, but stricter on the whole-text
+        fallback: only tries whole text if it starts with JSON syntax
+        ([ or {).  Prose starting with words is NOT repaired — that
+        would extract bare JSON from the ambiguous zone.
+        """
+        # 1. Code-fenced blocks
+        fenced = re.findall(r"```(?:json)?\s*\n?(.*?)\n?```", text, re.DOTALL)
+        if fenced:
+            return [s.strip() for s in fenced]
+
+        # 2. Sentinel-delimited blocks
+        sentinel_pattern = re.compile(
+            rf"{re.escape(self._SENTINEL_BEGIN)}\s*\n?(.*?)\n?\s*{re.escape(self._SENTINEL_END)}",
+            re.DOTALL,
+        )
+        sentinel = sentinel_pattern.findall(text)
+        if sentinel:
+            return [s.strip() for s in sentinel]
+
+        # 3. Whole text only if it starts with JSON syntax
+        stripped = text.strip()
+        if stripped and stripped[0] in ("[", "{"):
+            return [stripped]
+
+        return []
+
+    # Map model severity strings to our BUG/WARN/NIT taxonomy
+    _SEVERITY_MAP: dict[str, Severity] = {
+        "BUG": Severity.BUG,
+        "WARN": Severity.WARN,
+        "NIT": Severity.NIT,
+        # Common model variations
+        "CRITICAL": Severity.BUG,
+        "ERROR": Severity.BUG,
+        "HIGH": Severity.BUG,
+        "MAJOR": Severity.BUG,
+        "WARNING": Severity.WARN,
+        "MEDIUM": Severity.WARN,
+        "MODERATE": Severity.WARN,
+        "LOW": Severity.NIT,
+        "MINOR": Severity.NIT,
+        "INFO": Severity.NIT,
+        "SUGGESTION": Severity.NIT,
+        "TRIVIAL": Severity.NIT,
+    }
+
+    # Map model category strings to our Category enum
+    _CATEGORY_MAP: dict[str, Category] = {
+        # Direct matches
+        "correctness": Category.CORRECTNESS,
+        "design": Category.DESIGN,
+        "tests": Category.TESTS,
+        "maintainability": Category.MAINTAINABILITY,
+        "security": Category.SECURITY,
+        "style": Category.STYLE,
+        # Common model variations
+        "bug": Category.CORRECTNESS,
+        "logic": Category.CORRECTNESS,
+        "error": Category.CORRECTNESS,
+        "vulnerability": Category.SECURITY,
+        "injection": Category.SECURITY,
+        "credential": Category.SECURITY,
+        "credentials": Category.SECURITY,
+        "secret": Category.SECURITY,
+        "auth": Category.SECURITY,
+        "authentication": Category.SECURITY,
+        "performance": Category.DESIGN,
+        "complexity": Category.MAINTAINABILITY,
+        "readability": Category.MAINTAINABILITY,
+        "naming": Category.STYLE,
+        "formatting": Category.STYLE,
+        "convention": Category.STYLE,
+        "test": Category.TESTS,
+        "testing": Category.TESTS,
+        "coverage": Category.TESTS,
+    }
+
+    @staticmethod
+    def _first_str(d: dict[str, Any], keys: tuple[str, ...], default: str = "") -> str:
+        """Return the first non-empty string value found across keys."""
+        for key in keys:
+            val = d.get(key)
+            if val is not None and str(val).strip():
+                return str(val).strip()
+        return default
+
+    @staticmethod
+    def _first_int(d: dict[str, Any], keys: tuple[str, ...], default: int = 1) -> int:
+        """Return the first valid integer value found across keys.
+
+        Skips non-numeric values (empty strings, words, None) rather than
+        crashing — model JSON is not schema-validated.
+        """
+        for key in keys:
+            val = d.get(key)
+            if val is None:
+                continue
+            try:
+                return int(val)
+            except (ValueError, TypeError):
+                continue
+        return default
+
     def _dict_to_finding(
         self,
-        d: dict[str, Any],
+        d: Any,
         file_contents: dict[str, str],
         finding_num: int,
     ) -> Finding | None:
-        """Convert a dict to a Finding, computing fingerprint."""
-        try:
-            rule_id = d.get("rule_id", "unknown")
-            file_path = d.get("file", "unknown")
-            start_line = int(d.get("start_line", 1))
-            end_line = int(d.get("end_line", start_line))
-            evidence = d.get("evidence", "")
+        """Convert a dict to a Finding, computing fingerprint.
 
-            # Get code at location for fingerprint
-            code_at_location = self._get_code_at_location(
-                file_contents, file_path, start_line, end_line
-            )
-            fingerprint = compute_fingerprint(rule_id, code_at_location)
-
-            severity_str = d.get("severity", "NIT").upper()
-            severity = Severity(severity_str) if severity_str in Severity.__members__ else Severity.NIT
-
-            category_str = d.get("category", "style").lower()
-            try:
-                category = Category(category_str)
-            except ValueError:
-                category = Category.STYLE
-
-            confidence_str = d.get("confidence", "medium").lower()
-            try:
-                confidence = Confidence(confidence_str)
-            except ValueError:
-                confidence = Confidence.MEDIUM
-
-            status_str = d.get("status", "open").lower()
-            try:
-                status = FindingStatus(status_str)
-            except ValueError:
-                status = FindingStatus.OPEN
-
-            return Finding(
-                finding_id=f"F-{finding_num:03d}",
-                rule_id=rule_id,
-                severity=severity,
-                category=category,
-                message=d.get("message", ""),
-                primary_location=Location(
-                    file=file_path,
-                    start_line=start_line,
-                    end_line=end_line,
-                ),
-                related_locations=[],
-                fingerprint=fingerprint,
-                confidence=confidence,
-                evidence=evidence,
-                status=status,
-            )
-        except (KeyError, ValueError, TypeError):
+        Returns None for non-dict input (e.g. a string or number from malformed JSON).
+        """
+        if not isinstance(d, dict):
             return None
+
+        message = self._first_str(d, (
+            "message", "description", "text", "issue", "title",
+            "detail", "details", "finding", "problem",
+        ))
+        file_path = self._first_str(d, (
+            "file", "path", "filename", "filePath", "file_path",
+            "fileName", "file_name",
+        ))
+        # Infer file when model omits it and there's only one file
+        if not file_path and len(file_contents) == 1:
+            file_path = next(iter(file_contents))
+        file_path = file_path or "unknown"
+
+        start_line = self._first_int(d, (
+            "start_line", "startLine", "start_line_number",
+            "line", "line_number", "lineNumber",
+        ), default=1)
+        end_line = self._first_int(d, (
+            "end_line", "endLine", "end_line_number",
+        ), default=0)
+        # Fall back to "line" field, then start_line
+        if end_line == 0:
+            end_line = self._first_int(d, ("line",), default=start_line)
+
+        evidence = self._first_str(d, (
+            "evidence", "code", "snippet", "code_snippet", "codeSnippet",
+        ))
+
+        rule_id = self._first_str(d, ("rule_id", "ruleId", "rule"))
+        if not rule_id:
+            rule_id = self._infer_rule_id(message)
+
+        # Get code at location for fingerprint and evidence fallback
+        code_at_location = self._get_code_at_location(
+            file_contents, file_path, start_line, end_line
+        )
+        if not evidence and code_at_location:
+            evidence = code_at_location
+        fingerprint = compute_fingerprint(rule_id, code_at_location)
+
+        severity_str = str(d.get("severity", "NIT")).upper()
+        severity = self._SEVERITY_MAP.get(severity_str, Severity.NIT)
+
+        category_str = self._first_str(d, ("category", "type")).lower()
+        category = self._CATEGORY_MAP.get(category_str)
+        if category is None:
+            category = self._infer_category(message)
+
+        confidence_str = str(d.get("confidence", "medium")).lower()
+        try:
+            confidence = Confidence(confidence_str)
+        except ValueError:
+            confidence = Confidence.MEDIUM
+
+        status_str = str(d.get("status", "open")).lower()
+        try:
+            status = FindingStatus(status_str)
+        except ValueError:
+            status = FindingStatus.OPEN
+
+        return Finding(
+            finding_id=f"F-{finding_num:03d}",
+            rule_id=rule_id,
+            severity=severity,
+            category=category,
+            message=message,
+            primary_location=Location(
+                file=file_path,
+                start_line=start_line,
+                end_line=end_line,
+            ),
+            related_locations=[],
+            fingerprint=fingerprint,
+            confidence=confidence,
+            evidence=evidence,
+            status=status,
+        )
 
     def _try_regex(
         self,
@@ -166,11 +463,12 @@ class FindingParser:
             severity_str, file_path, start_str, end_str, message = match
             start_line = int(start_str)
             end_line = int(end_str) if end_str else start_line
+            message = message.strip()
 
-            severity_str = severity_str.upper()
-            severity = Severity(severity_str) if severity_str in Severity.__members__ else Severity.NIT
+            severity = self._SEVERITY_MAP.get(severity_str.upper(), Severity.NIT)
 
             rule_id = self._infer_rule_id(message)
+            category = self._infer_category(message)
             code_at_location = self._get_code_at_location(
                 file_contents, file_path, start_line, end_line
             )
@@ -181,8 +479,8 @@ class FindingParser:
                     finding_id=f"F-{start_id + i:03d}",
                     rule_id=rule_id,
                     severity=severity,
-                    category=Category.STYLE,
-                    message=message.strip(),
+                    category=category,
+                    message=message,
                     primary_location=Location(
                         file=file_path,
                         start_line=start_line,
@@ -237,14 +535,82 @@ class FindingParser:
     def _infer_rule_id(self, message: str) -> str:
         """Infer a rule_id from a free-text message."""
         msg_lower = message.lower()
+        if "command injection" in msg_lower or ("inject" in msg_lower and "shell" in msg_lower):
+            return "command-injection"
+        if "sql" in msg_lower and "inject" in msg_lower:
+            return "sql-injection"
+        if "xss" in msg_lower or "cross-site" in msg_lower:
+            return "xss"
+        if "hardcod" in msg_lower and ("password" in msg_lower or "secret" in msg_lower or "credential" in msg_lower):
+            return "hardcoded-credential"
+        if "password" in msg_lower or "credential" in msg_lower or "secret" in msg_lower:
+            return "credential-exposure"
+        if "arbitrary" in msg_lower and ("code" in msg_lower or "execution" in msg_lower):
+            return "unsafe-code-execution"
+        if "shell" in msg_lower and "subprocess" in msg_lower:
+            return "unsafe-shell-execution"
         if "error" in msg_lower or "exception" in msg_lower:
             return "missing-error-handling"
-        if "unused" in msg_lower or "import" in msg_lower:
+        if "unused" in msg_lower and "import" in msg_lower:
             return "unused-import"
+        if "null" in msg_lower or "none" in msg_lower or "undefined" in msg_lower:
+            return "missing-null-check"
         if "naming" in msg_lower or "convention" in msg_lower:
             return "naming-convention"
         if "race" in msg_lower or "concurren" in msg_lower:
             return "race-condition"
-        if "security" in msg_lower or "inject" in msg_lower:
+        if "security" in msg_lower or "vulnerab" in msg_lower:
             return "security-issue"
         return "code-issue"
+
+    def _infer_category(self, message: str) -> Category:
+        """Infer a category from a free-text message.
+
+        Uses multi-word phrases where possible to reduce false positives
+        from common words like 'error', 'test', 'none'.
+        """
+        msg_lower = message.lower()
+        # Security: high-signal terms first
+        security_terms = [
+            "inject", "vulnerab", "security", "credential", "password",
+            "secret", "xss", "csrf", "permission", "hardcod",
+            "plaintext", "exposure", "exploit", "shell=true",
+            "attacker", "malicious", "untrusted", "arbitrary code",
+            "remote code", "code execution", "deserialization",
+            "command execution",
+        ]
+        if any(term in msg_lower for term in security_terms):
+            return Category.SECURITY
+        # Correctness: use specific error types and multi-word phrases
+        correctness_terms = [
+            "attributeerror", "typeerror", "keyerror", "indexerror",
+            "valueerror", "runtimeerror", "zerodivisionerror",
+            "raise ", "raises ", "will crash", "will fail",
+            "does not exist", "incorrect behavior", "incorrect result",
+            "logic error", "off-by-one", "infinite loop",
+            "null pointer", "null reference", "nullpointer",
+        ]
+        if any(term in msg_lower for term in correctness_terms):
+            return Category.CORRECTNESS
+        # Tests
+        test_terms = [
+            "test coverage", "missing test", "test case", "unit test",
+            "assertion", "test quality", "mock", "test fixture",
+        ]
+        if any(term in msg_lower for term in test_terms):
+            return Category.TESTS
+        # Maintainability
+        maint_terms = [
+            "complexity", "readability", "maintainab", "technical debt",
+            "code smell", "duplication", "deeply nested",
+        ]
+        if any(term in msg_lower for term in maint_terms):
+            return Category.MAINTAINABILITY
+        # Design
+        design_terms = [
+            "design", "architect", "coupling", "cohesion",
+            "abstraction", "single responsibility", "separation of concern",
+        ]
+        if any(term in msg_lower for term in design_terms):
+            return Category.DESIGN
+        return Category.STYLE

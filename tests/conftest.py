@@ -135,3 +135,43 @@ def copilot_json_response() -> str:
     }
 ]
 ```"""
+
+
+# --- T028: Fixtures for mixed-output, truncated JSON, and dual-format tests ---
+
+
+@pytest.fixture
+def mixed_output_response() -> str:
+    """Copilot response with JSON embedded in conversational prose."""
+    return """Here are my findings from the code review:
+
+```json
+[{"rule_id": "missing-error-handling", "severity": "BUG", "category": "correctness", "message": "No error handling", "file": "foo.py", "start_line": 2, "end_line": 3, "confidence": "high", "evidence": "def main():\\n    pass"}]
+```
+
+Let me know if you have any questions."""
+
+
+@pytest.fixture
+def truncated_json_response() -> str:
+    """Copilot response with truncated JSON (unclosed bracket)."""
+    return '[{"rule_id": "unused-import", "severity": "NIT", "category": "style", "message": "Unused import", "file": "foo.py", "start_line": 1, "end_line": 1, "confidence": "high", "evidence": "import os"}'
+
+
+@pytest.fixture
+def dual_format_discuss_response() -> str:
+    """Copilot discuss response: conversational text + JSON findings at end."""
+    return """I looked at the code and I agree with your concern about error handling.
+The function should handle the case where the input list is empty.
+
+Here are my updated findings:
+
+```json
+[{"rule_id": "missing-error-handling", "severity": "BUG", "category": "correctness", "message": "Function does not handle empty input", "file": "foo.py", "start_line": 2, "end_line": 3, "confidence": "high", "evidence": "def main():\\n    pass"}]
+```"""
+
+
+@pytest.fixture
+def object_wrapped_response() -> str:
+    """Copilot response wrapping findings in an object instead of bare array."""
+    return '{"findings": [{"rule_id": "unused-import", "severity": "NIT", "category": "style", "message": "Unused import", "file": "foo.py", "start_line": 1, "end_line": 1, "confidence": "high", "evidence": "import os"}]}'

@@ -8,14 +8,12 @@ Per contracts/review-engine.md.
 from __future__ import annotations
 
 import uuid
-from collections import Counter
 from datetime import datetime, timezone
 
 from server.copilot_client import CopilotReviewClient
 from server.denylist import ContentDenylist
 from server.finding_parser import FindingParser
 from server.models import (
-    Category,
     DiscussRequest,
     DiscussResult,
     Finding,
@@ -30,10 +28,9 @@ from server.models import (
     SessionInfo,
     SessionList,
     SessionStatus,
-    Severity,
     TokenUsage,
 )
-from server.prompts import REVIEWER_PERSONA, build_review_context
+from server.prompts import DISCUSS_REINFORCEMENT, REVIEWER_PERSONA, build_review_context
 from server.store import SessionStore
 
 
@@ -222,7 +219,7 @@ class ReviewEngine:
             if denied:
                 raise ContentDeniedError(denied)
 
-        # Step 4: Format follow-up prompt
+        # Step 4: Format follow-up prompt (FR-005, D-4: append reinforcement last)
         prompt_parts = [request.message]
         if request.additional_files:
             for path, content in sorted(request.additional_files.items()):
@@ -230,6 +227,7 @@ class ReviewEngine:
                 while fence in content:
                     fence += "`"
                 prompt_parts.append(f"\n### {path}\n{fence}\n{content}\n{fence}")
+        prompt_parts.append(DISCUSS_REINFORCEMENT)
         prompt = "\n".join(prompt_parts)
 
         # Step 5: Send to Copilot
@@ -350,7 +348,6 @@ class ReviewEngine:
         - Existing with no match in new: keep as-is (may be dismissed/fixed)
         """
         existing_by_fp = {f.fingerprint: f for f in existing}
-        existing_ids = {f.finding_id for f in existing}
         next_id = max(
             (int(f.finding_id.split("-")[1]) for f in existing),
             default=0,

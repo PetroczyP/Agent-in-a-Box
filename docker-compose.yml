@@ -1,5 +1,6 @@
 services:
   review-server:
+    container_name: agent-in-a-box
     build: .
     ports:
       - "8080:8080"

@@ -1,0 +1,37 @@
+{
+  "samples": [
+    {
+      "file": "sample_bug_division_by_zero.py",
+      "diff": "--- /dev/null\n+++ b/sample_bug_division_by_zero.py\n@@ -0,0 +1,13 @@\n+def calculate_average(numbers: list[int]) -> float:\n+    total = sum(numbers)\n+    return total / len(numbers)\n",
+      "expected_findings": [
+        {
+          "severity": "BUG",
+          "category": "correctness",
+          "description": "Division by zero when list is empty"
+        }
+      ]
+    },
+    {
+      "file": "sample_warn_broad_except.py",
+      "diff": "--- /dev/null\n+++ b/sample_warn_broad_except.py\n@@ -0,0 +1,12 @@\n+import json\n+\n+def load_config(path: str) -> dict:\n+    try:\n+        with open(path) as f:\n+            return json.load(f)\n+    except:\n+        return {}\n",
+      "expected_findings": [
+        {
+          "severity": "WARN",
+          "category": "correctness",
+          "description": "Bare except catches everything including KeyboardInterrupt"
+        }
+      ]
+    },
+    {
+      "file": "sample_nit_naming.py",
+      "diff": "--- /dev/null\n+++ b/sample_nit_naming.py\n@@ -0,0 +1,5 @@\n+def calcAvg(Data):\n+    return sum(Data) / len(Data)\n",
+      "expected_findings": [
+        {
+          "severity": "NIT",
+          "category": "style",
+          "description": "Function and parameter names should use snake_case"
+        }
+      ]
+    }
+  ]
+}

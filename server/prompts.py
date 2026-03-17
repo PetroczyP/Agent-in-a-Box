@@ -1,10 +1,29 @@
-"""Reviewer persona prompts — T015.
+"""Reviewer persona prompts — T015, T010-T012.
 
-System prompt instructs Copilot to output JSON findings with severity/category/evidence.
-Per contracts/review-engine.md Context Ordering section.
+System prompt instructs the inner model to output JSON findings with
+severity/category/evidence.  Per contracts/review-engine.md Context Ordering
+section.
+
+T010: Few-shot examples teach the expected output format (BUG + empty array).
+T011: FORMAT_REINFORCEMENT constant for end-of-context format reminder.
+T012: Inline comments document rationale for each prompt section.
 """
 
 from __future__ import annotations
+
+# ---------------------------------------------------------------------------
+# T010 / FR-001, D-1 — REVIEWER_PERSONA
+#
+# The system prompt is sent as the *system message* for every review request.
+# It defines the JSON output schema, severity taxonomy, and review dimensions.
+#
+# Few-shot examples (### Example 1 / ### Example 2) demonstrate the exact
+# output format the model should produce.  They are project-agnostic on
+# purpose (Constitution Principle I) and model-agnostic (Principle V) —
+# they teach *structure*, not domain-specific review patterns.
+#
+# SC-005: total length MUST stay under 12,800 characters.
+# ---------------------------------------------------------------------------
 
 REVIEWER_PERSONA = """You are a senior code reviewer performing a thorough code review.
 
@@ -44,6 +63,38 @@ Classify each finding into exactly one category:
 - **security**: Vulnerabilities, unsafe patterns, data exposure
 - **style**: Naming, formatting, conventions
 
+## Few-Shot Examples
+
+The following examples show the exact output format you must produce.
+
+### Example 1 — Issues found (BUG)
+
+When you find issues, return a JSON array containing one object per finding:
+
+```json
+[
+    {
+        "rule_id": "missing-null-check",
+        "severity": "BUG",
+        "category": "correctness",
+        "message": "Function does not check for null input before calling .strip(), which will raise AttributeError when data is None",
+        "file": "utils.py",
+        "start_line": 10,
+        "end_line": 12,
+        "confidence": "high",
+        "evidence": "def process(data):\\n    return data.strip()"
+    }
+]
+```
+
+### Example 2 — No issues found (clean code)
+
+When the code has no issues, return an empty JSON array:
+
+```json
+[]
+```
+
 ## Rules
 
 1. Be specific — reference exact file paths and line numbers
@@ -51,11 +102,59 @@ Classify each finding into exactly one category:
 3. Ground BUG and WARN findings in evidence — quote the specific code
 4. If you find no issues, return an empty array: []
 5. Do not include meta-commentary outside the JSON array
+6. Always wrap your JSON output in a ```json code fence or between BEGIN_FINDINGS_JSON / END_FINDINGS_JSON delimiters
 """
+
+# ---------------------------------------------------------------------------
+# T011 / FR-002, D-6 — FORMAT_REINFORCEMENT
+#
+# Appended as the very last section of the assembled review context when
+# reinforce_format=True (the default).  This "sandwich" technique places
+# the format instruction both in the system prompt (REVIEWER_PERSONA) and
+# at the tail of the user message, which reduces format drift in long
+# contexts.  Models tend to weight the beginning and end of their context
+# window more heavily, so doubling up improves compliance.
+# ---------------------------------------------------------------------------
+
+FORMAT_REINFORCEMENT = (
+    "IMPORTANT: Respond with ONLY a JSON array of findings, wrapped in "
+    "a ```json code fence or between BEGIN_FINDINGS_JSON / "
+    "END_FINDINGS_JSON delimiters. Do not embed bare JSON in prose text. "
+    "If you found no issues:\n"
+    "BEGIN_FINDINGS_JSON\n[]\nEND_FINDINGS_JSON"
+)
+
+# ---------------------------------------------------------------------------
+# T021 / FR-005, D-4 — DISCUSS_REINFORCEMENT
+#
+# Appended after the user's follow-up message (and any additional files)
+# in ReviewEngine.discuss().  Unlike FORMAT_REINFORCEMENT (which demands
+# JSON-only output), this asks for a dual-format response: conversational
+# text first, then any new/updated findings as JSON in a code fence.
+#
+# This preserves the spec 001 contract where DiscussResult.response is
+# human-readable text, while still giving the parser a stable
+# machine-readable section to extract findings from.
+# ---------------------------------------------------------------------------
+
+DISCUSS_REINFORCEMENT = (
+    "\n\n---\n"
+    "After your conversational response, include any new or updated findings "
+    "as a JSON array inside a ```json code fence or between "
+    "BEGIN_FINDINGS_JSON / END_FINDINGS_JSON delimiters at the end. Use the "
+    "same finding format (rule_id, severity, category, message, file, "
+    "start_line, end_line, confidence, evidence). If there are no new or "
+    "updated findings, end with an empty array:\n"
+    "```json\n[]\n```"
+)
 
 
 def _fence(content: str, language: str = "") -> str:
-    """Build a fenced code block with dynamic delimiter to avoid conflicts."""
+    """Build a fenced code block with dynamic delimiter to avoid conflicts.
+
+    Adds extra backticks when the content itself contains triple backticks,
+    ensuring the fence never collides with the payload.
+    """
     fence = "```"
     while fence in content:
         fence += "`"
@@ -72,22 +171,44 @@ def build_review_context(
     test_files: dict[str, str] | None = None,
     test_results: str | None = None,
     context: str | None = None,
+    reinforce_format: bool = True,
 ) -> str:
     """Assemble review context in FR-008 deterministic order.
 
-    Order: conventions → anti_patterns → spec → diff → files → test_files → test_results → context
-    """
-    sections = []
+    Order: conventions -> anti_patterns -> spec -> diff -> files
+           -> test_files -> test_results -> context -> [reinforcement]
 
+    Args:
+        conventions: Project-specific coding rules (optional).
+        anti_patterns: Known anti-patterns to watch for (optional).
+        spec: Spec artifacts providing design intent (optional).
+        diff: The git diff to review (required).
+        files: Mapping of file paths to full file contents (required).
+        test_files: Mapping of test file paths to contents (optional).
+        test_results: Raw test output (optional).
+        context: Free-form additional context, e.g. PR description (optional).
+        reinforce_format: When True (default), appends FORMAT_REINFORCEMENT
+            as the final section.  This "sandwich" technique helps keep the
+            model on-format for long contexts.  Set to False when the caller
+            handles format enforcement externally.
+
+    Returns:
+        The fully assembled review context string.
+    """
+    sections: list[str] = []
+
+    # --- Project-level guidance (optional, appears first for priming) ---
     if conventions:
         sections.append(f"## Project Rules\n\n{conventions}")
 
     if anti_patterns:
         sections.append(f"## Anti-Patterns\n\n{anti_patterns}")
 
+    # --- Design intent (optional) ---
     if spec:
         sections.append(f"## Spec Artifacts\n\n{spec}")
 
+    # --- The actual code under review (always present) ---
     sections.append(f"## Git Diff\n\n{_fence(diff, 'diff')}")
 
     if files:
@@ -96,6 +217,7 @@ def build_review_context(
             file_section += f"\n### {path}\n{_fence(content)}\n"
         sections.append(file_section)
 
+    # --- Supporting evidence (optional) ---
     if test_files:
         test_section = "## Test Files\n"
         for path, content in sorted(test_files.items()):
@@ -105,7 +227,12 @@ def build_review_context(
     if test_results:
         sections.append(f"## Test Results\n\n{_fence(test_results)}")
 
+    # --- Caller-supplied free-form context (optional, near end) ---
     if context:
         sections.append(f"## Additional Context\n\n{context}")
+
+    # --- Format reinforcement (last position for recency bias) ---
+    if reinforce_format:
+        sections.append(FORMAT_REINFORCEMENT)
 
     return "\n\n".join(sections)
