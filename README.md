@@ -4,6 +4,26 @@ A Dockerized AI code review sidecar. It receives code via [MCP](https://modelcon
 
 **Project-agnostic** — it knows nothing about the repo it reviews until the orchestrating agent tells it.
 
+## Why Agent-in-a-Box?
+
+AI code review is increasingly commoditized — Claude Code, Codex CLI, and Copilot CLI all do it natively. Agent-in-a-Box is different because it's not a code review tool. It's a **containerized, MCP-speaking agent worker** designed to be composed into larger systems.
+
+### Composable Agent Microservice
+
+CI pipelines, Slack bots, and internal platforms don't want to manage Claude Code installations on every machine. They want to throw a payload at a container and get structured output back. Agent-in-a-Box exposes a clean MCP interface — send code in, get SARIF findings out. No setup on the host, no dependencies, no state.
+
+### Enterprise Security by Design
+
+The container has **zero filesystem access** to the host. All code arrives via MCP parameters. A content denylist blocks `.env`, `*.pem`, `*.key`, and credential files. The only secret in the container is a single API token. An enterprise security team can audit one container image and approve it — compare that to installing AI tools on every developer's machine and trusting their local configurations.
+
+### Model-Agnostic Interface
+
+The MCP contract stays the same whether Copilot, Claude, OpenAI, or a local Ollama model runs inside. The consuming system doesn't care what model answers — it sends code, it gets structured findings. Swap backends with a config change, not a code change.
+
+### Scalable by Default
+
+Spin up 50 containers, throw 50 PRs at them in parallel, tear them down. Stateless by design, horizontally scalable. This is the pattern that enterprises building internal AI platforms actually need — not a desktop tool, but a fleet of agent workers.
+
 ## Architecture
 
 ```text
@@ -104,8 +124,12 @@ docker compose up -d
 | 003 | Review Dashboard (web UI) | Draft |
 | 004 | Human Oversight (approval workflow) | Draft |
 | 005 | Model Configuration | Draft |
-| 006 | Fallback Backends (OpenAI, Anthropic, etc.) | Draft |
+| 006 | Fallback Backends (OpenAI, Anthropic, Gemini, Ollama) | Draft |
 | 007 | Eval Harness | Draft |
+| 008 | Prompt Tuning for Structured Output | In Progress |
+| 009 | Slack Integration | Backlog |
+| 010 | Agent SDK Backends (Claude Agent SDK, Codex CLI) | Backlog |
+| 011 | REST API Transport (CI/CD integration) | Backlog |
 
 ## License
 
