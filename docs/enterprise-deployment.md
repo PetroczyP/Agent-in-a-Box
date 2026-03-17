@@ -29,7 +29,7 @@ How to deploy Agent-in-a-Box in enterprise CI/CD pipelines on Azure, with GitHub
         api.anthropic.com     *.githubcopilot.com
 ```
 
-Agent-in-a-Box runs as a stateless container. CI pipelines call it via the REST API (`POST /api/v1/reviews`) or MCP stdio (`docker exec`). The container makes outbound HTTPS calls to whichever AI model backend is configured.
+Agent-in-a-Box runs as a stateless container. CI pipelines call it via MCP stdio (`docker exec -i <container> python -m server.mcp_server`). A REST API transport is planned (see spec 011) but not yet implemented. The container makes outbound HTTPS calls to whichever AI model backend is configured.
 
 ## Where to Host the Container
 
@@ -129,16 +129,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Submit review
+      - name: Submit review via MCP
         run: |
-          # Generate diff
+          # Generate diff and file contents
           DIFF=$(git diff origin/main...HEAD)
 
-          # Call Agent-in-a-Box REST API
-          curl -s -X POST http://localhost:8080/api/v1/reviews \
-            -H "Content-Type: application/json" \
-            -d "{\"diff\": $(echo "$DIFF" | jq -Rs .)}" \
-            -o findings.json
+          # Call Agent-in-a-Box via MCP stdio
+          # (REST API transport planned — see spec 011)
+          docker exec -i reviewer python -m server.mcp_server <<EOF
+          {"method": "tools/call", "params": {"name": "start_review", "arguments": {"diff": "$(echo "$DIFF" | jq -Rs .)"}}}
+          EOF
 
       - name: Post findings as PR comment
         run: |
@@ -174,10 +174,11 @@ steps:
 
   - script: |
       DIFF=$(git diff origin/main...HEAD)
-      curl -s -X POST http://localhost:8080/api/v1/reviews \
-        -H "Content-Type: application/json" \
-        -d "{\"diff\": $(echo "$DIFF" | jq -Rs .)}"
-    displayName: 'Submit code review'
+      # Call via MCP stdio (REST API planned — see spec 011)
+      docker exec -i reviewer python -m server.mcp_server <<EOF
+      {"method": "tools/call", "params": {"name": "start_review", "arguments": {"diff": "$(echo "$DIFF" | jq -Rs .)"}}}
+      EOF
+    displayName: 'Submit code review via MCP'
 
   - script: docker stop reviewer && docker rm reviewer
     displayName: 'Cleanup'
@@ -194,8 +195,8 @@ container:
   image: your-acr.azurecr.io/agent-in-a-box:latest
 
 steps:
-  - script: python -m server.review_cli --diff "$(git diff)"
-    displayName: 'Run review'
+  - script: python -m server.mcp_server
+    displayName: 'Start MCP server'
 ```
 
 **ADO agent outbound requirements** (port 443): `dev.azure.com`, `*.dev.azure.com`, `*.visualstudio.com`, `vstsagentpackage.azureedge.net`, `*.blob.core.windows.net`, `mcr.microsoft.com`.
@@ -217,9 +218,10 @@ code-review:
     - apk add --no-cache curl jq git
     - DIFF=$(git diff origin/main...HEAD)
     - |
-      curl -s -X POST http://reviewer:8080/api/v1/reviews \
-        -H "Content-Type: application/json" \
-        -d "{\"diff\": $(echo "$DIFF" | jq -Rs .)}"
+      # Call via MCP stdio (REST API planned — see spec 011)
+      docker exec -i reviewer python -m server.mcp_server <<EOF
+      {"method": "tools/call", "params": {"name": "start_review", "arguments": {"diff": "$(echo "$DIFF" | jq -Rs .)"}}}
+      EOF
 ```
 
 With `FF_NETWORK_PER_BUILD`, service containers are reachable by their alias hostname (`reviewer`). Without it, use Docker's legacy linking.

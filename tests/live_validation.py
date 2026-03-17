@@ -33,10 +33,7 @@ async def run_validation():
     print("=" * 60)
 
     is_fine_grained = token.startswith("github_pat_")
-    if is_fine_grained:
-        token_type = "github_pat_ (fine-grained PAT)"
-    else:
-        token_type = f"{token[:4]}... (not fine-grained)"
+    token_type = "fine-grained PAT" if is_fine_grained else "not fine-grained"
     print(f"  Token type: {token_type}")
 
     if not is_fine_grained:

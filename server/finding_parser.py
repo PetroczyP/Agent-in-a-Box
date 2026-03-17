@@ -234,9 +234,6 @@ class FindingParser:
         if not any_repaired:
             return None
 
-        if len(all_items) == 0:
-            return []
-
         findings = []
         for i, item in enumerate(all_items):
             if not isinstance(item, dict):

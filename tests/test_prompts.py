@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import json
 
-import pytest
-
 from server.prompts import (
     FORMAT_REINFORCEMENT,
     REVIEWER_PERSONA,
@@ -31,15 +29,17 @@ class TestReviewerPersonaFewShot:
 
     def test_contains_empty_array_example(self):
         """An example shows returning [] for clean code."""
-        # The persona must demonstrate the empty-array output case
-        # beyond the schema definition block. Look for a distinct
-        # few-shot section that shows the literal empty array.
-        persona_after_schema = REVIEWER_PERSONA.split("## Rules")[0]
-        # Count occurrences of standalone "[]" — the schema already has
-        # one in the Output Format block; a second one should appear in
-        # the few-shot examples section.
         assert REVIEWER_PERSONA.count("Example") >= 2, (
             "REVIEWER_PERSONA must contain at least 2 few-shot examples"
+        )
+        # The few-shot section must include a literal empty array example
+        # for the "no issues found" case, beyond the schema definition.
+        examples_section = REVIEWER_PERSONA.split("### Example", 1)
+        assert len(examples_section) > 1, (
+            "REVIEWER_PERSONA must have '### Example' sections"
+        )
+        assert "[]" in examples_section[1], (
+            "Few-shot examples must include a [] empty-array example for clean code"
         )
 
     def test_few_shot_bug_example_is_valid_json(self):
