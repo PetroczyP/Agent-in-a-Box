@@ -1,7 +1,7 @@
 """Live validation script for spec 008 — Phase 8 tasks (T002b, T030-T035).
 
 Runs INSIDE Docker container against live Copilot.
-Usage: docker exec agent-in-a-box python tests/live_validation.py
+Usage: docker exec $(docker compose ps -q review-server) python tests/live_validation.py
 """
 
 from __future__ import annotations

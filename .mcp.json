@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "code-reviewer": {
+      "command": "docker",
+      "args": ["exec", "-i", "agent-in-a-box-review-server-1", "python", "-m", "server.mcp_server"]
+    }
+  }
+}

@@ -3,7 +3,7 @@
 Runs the ORIGINAL (pre-spec-008) prompt against live Copilot to establish
 the "before" state for comparison with post-change metrics.
 
-Usage: docker exec agent-in-a-box python tests/live_baseline.py
+Usage: docker exec $(docker compose ps -q review-server) python tests/live_baseline.py
 """
 
 from __future__ import annotations
