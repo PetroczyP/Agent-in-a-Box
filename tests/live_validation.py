@@ -277,7 +277,7 @@ async def run_validation():
         break
 
     if not discuss_result_ok:
-        print("  T034: SKIP (no successful review session to discuss)")
+        print("  T034: FAIL (no successful review session to discuss)")
 
     # ── Summary ───────────────────────────────────────────────────────
     print()
@@ -289,9 +289,9 @@ async def run_validation():
     print(f"  SC-002 NIT-wrap rate:    {nit_rate:.0f}% ({'PASS' if sc002_pass else 'FAIL'})")
     print(f"  SC-003 Severity levels:  {len(all_severities)} ({'PASS' if sc003_pass else 'FAIL'})")
     print(f"  SC-006 Classification:   {accuracy:.0f}% ({'PASS' if sc006_pass else 'FAIL'})")
-    print(f"  T034 Discuss:            {'PASS' if discuss_result_ok else 'SKIP'}")
+    print(f"  T034 Discuss:            {'PASS' if discuss_result_ok else 'FAIL'}")
 
-    all_pass = sc001_pass and sc002_pass and sc003_pass and sc006_pass
+    all_pass = sc001_pass and sc002_pass and sc003_pass and sc006_pass and discuss_result_ok
     print(f"\n  Overall: {'ALL SC PASS' if all_pass else 'SOME SC FAIL — may need prompt iteration (T033)'}")
 
     # Clean up
