@@ -47,11 +47,11 @@ async def run_validation():
         if not client.is_connected:
             print("  FAIL: Client not connected after start()")
             return False
-        print(f"  Connected: True")
+        print("  Connected: True")
         print(f"  Selected model: {client.selected_model}")
         models = await client.get_available_models()
         print(f"  Available models: {[m['id'] for m in models]}")
-        print(f"  T002b: PASS")
+        print("  T002b: PASS")
     except CopilotAuthError as e:
         print(f"  FAIL: Auth error — {e}")
         print("  Check: Is the PAT fine-grained with 'Copilot Requests' Account permission?")
@@ -191,15 +191,16 @@ async def run_validation():
     for r in results:
         if r.get("error"):
             continue
+        remaining = list(r["findings"])
         for expected in r["expected"]:
             total_expected += 1
             exp_sev = expected["severity"].upper()
             exp_cat = expected["category"].lower()
-            # Check if any finding matches both severity and category
             matched = False
-            for finding in r["findings"]:
+            for i, finding in enumerate(remaining):
                 if finding.severity.value == exp_sev and finding.category.value == exp_cat:
                     matched = True
+                    remaining.pop(i)
                     break
             status = "MATCH" if matched else "MISS"
             print(f"    {r['file']}: expected {exp_sev}/{exp_cat} — {status}")
@@ -253,16 +254,23 @@ async def run_validation():
             print(f"  File: {file_name}")
             print(f"  Response time: {elapsed:.1f}s")
             print(f"  Response length: {len(discuss_response)} chars")
-            print(f"  Has conversational text: {len(discuss_response) > 50}")
-
-            # Check if parser can extract findings from discuss response
-            discuss_findings = parser.parse(discuss_response, files)
+            # Check if response has conversational prefix and structured findings
             discuss_json = parser._try_json(discuss_response, files, 1)
-            print(f"  Parser found findings: {len(discuss_findings)}")
-            print(f"  JSON extractable: {discuss_json is not None}")
+            stripped = discuss_response.lstrip()
+            has_conversational_prefix = bool(stripped) and not stripped.startswith(
+                ("```", "BEGIN_FINDINGS_JSON", "[", "{")
+            )
+            has_structured_tail = discuss_json is not None
+
+            print(f"  Has conversational prefix: {has_conversational_prefix}")
+            print(f"  Has structured findings: {has_structured_tail}")
             print(f"  Response preview: {discuss_response[:300]}...")
-            discuss_result_ok = True
-            print("  T034: PASS")
+
+            if has_conversational_prefix and has_structured_tail:
+                discuss_result_ok = True
+                print("  T034: PASS")
+            else:
+                print("  T034: FAIL (expected conversational text plus extractable findings JSON)")
         except Exception as e:
             print(f"  ERROR: {type(e).__name__} — {e}")
 
@@ -276,7 +284,7 @@ async def run_validation():
     print("=" * 60)
     print("SUMMARY")
     print("=" * 60)
-    print(f"  T002b PAT Verification:  PASS (fine-grained PAT)")
+    print("  T002b PAT Verification:  PASS (fine-grained PAT)")
     print(f"  SC-001 JSON parse rate:  {json_rate:.0f}% ({'PASS' if sc001_pass else 'FAIL'})")
     print(f"  SC-002 NIT-wrap rate:    {nit_rate:.0f}% ({'PASS' if sc002_pass else 'FAIL'})")
     print(f"  SC-003 Severity levels:  {len(all_severities)} ({'PASS' if sc003_pass else 'FAIL'})")

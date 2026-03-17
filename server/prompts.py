@@ -101,7 +101,7 @@ When the code has no issues, return an empty JSON array:
 2. Use stable rule_id values (e.g., "missing-error-handling", "unused-import")
 3. Ground BUG and WARN findings in evidence — quote the specific code
 4. If you find no issues, return an empty array: []
-5. Do not include meta-commentary outside the JSON array
+5. Do not include meta-commentary or prose outside the JSON array and its delimiters
 6. Always wrap your JSON output in a ```json code fence or between BEGIN_FINDINGS_JSON / END_FINDINGS_JSON delimiters
 """
 
@@ -117,7 +117,7 @@ When the code has no issues, return an empty JSON array:
 # ---------------------------------------------------------------------------
 
 FORMAT_REINFORCEMENT = (
-    "IMPORTANT: Respond with ONLY a JSON array of findings, wrapped in "
+    "IMPORTANT: Respond with your findings as a JSON array wrapped in "
     "a ```json code fence or between BEGIN_FINDINGS_JSON / "
     "END_FINDINGS_JSON delimiters. Do not embed bare JSON in prose text. "
     "If you found no issues:\n"
@@ -140,8 +140,9 @@ FORMAT_REINFORCEMENT = (
 DISCUSS_REINFORCEMENT = (
     "\n\n---\n"
     "After your conversational response, include any new or updated findings "
-    "as a JSON array inside a ```json code fence or between "
-    "BEGIN_FINDINGS_JSON / END_FINDINGS_JSON delimiters at the end. Use the "
+    "as a JSON array in exactly one ```json code fence or between "
+    "BEGIN_FINDINGS_JSON / END_FINDINGS_JSON delimiters at the very end. "
+    "Do not include other JSON arrays or fenced code blocks before it. Use the "
     "same finding format (rule_id, severity, category, message, file, "
     "start_line, end_line, confidence, evidence). If there are no new or "
     "updated findings, end with an empty array:\n"

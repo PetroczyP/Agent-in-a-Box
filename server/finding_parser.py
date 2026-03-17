@@ -313,7 +313,7 @@ class FindingParser:
         "secret": Category.SECURITY,
         "auth": Category.SECURITY,
         "authentication": Category.SECURITY,
-        "performance": Category.DESIGN,
+        "performance": Category.MAINTAINABILITY,
         "complexity": Category.MAINTAINABILITY,
         "readability": Category.MAINTAINABILITY,
         "naming": Category.STYLE,

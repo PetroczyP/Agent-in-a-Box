@@ -4,7 +4,7 @@ How to deploy Agent-in-a-Box in enterprise CI/CD pipelines on Azure, with GitHub
 
 ## Architecture Overview
 
-```
+```text
 ┌──────────────────────────────────────────────────────────────┐
 │  Azure VNet                                                  │
 │                                                              │
@@ -105,7 +105,7 @@ Anthropic is the exception: their static IP ranges allow NSG-only rules if that 
 
 ### GitHub Actions
 
-GitHub Actions supports **service containers** via the `services:` keyword. The Agent-in-a-Box container runs alongside your job and is accessible via HTTP.
+Self-hosted runners have direct Docker access, so Agent-in-a-Box runs as a sidecar container managed by the workflow steps.
 
 **Example workflow (self-hosted runner in VNet):**
 
@@ -116,18 +116,17 @@ on: [pull_request]
 jobs:
   review:
     runs-on: self-hosted  # runner in your Azure VNet
-    services:
-      reviewer:
-        image: your-acr.azurecr.io/agent-in-a-box:latest
-        credentials:
-          username: ${{ secrets.ACR_USERNAME }}
-          password: ${{ secrets.ACR_PASSWORD }}
-        ports:
-          - 8080:8080
-        env:
-          GITHUB_TOKEN: ${{ secrets.COPILOT_PAT }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: Start Agent-in-a-Box container
+        run: |
+          docker login your-acr.azurecr.io \
+            -u ${{ secrets.ACR_USERNAME }} \
+            -p ${{ secrets.ACR_PASSWORD }}
+          docker run -d --name reviewer \
+            -e GITHUB_TOKEN=${{ secrets.COPILOT_PAT }} \
+            your-acr.azurecr.io/agent-in-a-box:latest
 
       - name: Submit review via MCP
         run: |
@@ -144,10 +143,13 @@ jobs:
         run: |
           # Parse findings and post to PR
           # (implementation depends on your preferred format)
+
+      - name: Cleanup
+        if: always()
+        run: docker stop reviewer && docker rm reviewer
 ```
 
 **Requirements:**
-- Service containers require **Linux runners**
 - Self-hosted runners must have Docker installed
 - Self-hosted runners in a VNet need outbound HTTPS to `github.com`, `api.github.com`, `*.actions.githubusercontent.com`, `codeload.github.com`, and `*.blob.core.windows.net`
 
@@ -203,28 +205,32 @@ steps:
 
 ### GitLab CI/CD
 
-**GitLab Runner with Docker executor:**
+**GitLab Runner with shell executor:**
+
+MCP stdio requires `docker exec` into the container, so use a **shell executor** with Docker access (not the Docker executor, which isolates the job from the host Docker daemon).
 
 ```yaml
 code-review:
-  image: alpine:latest
-  services:
-    - name: your-acr.azurecr.io/agent-in-a-box:latest
-      alias: reviewer
   variables:
     GITHUB_TOKEN: $COPILOT_PAT
-    FF_NETWORK_PER_BUILD: "true"  # isolated network per job
+  tags:
+    - shell  # requires shell executor with Docker access
   script:
-    - apk add --no-cache curl jq git
     - DIFF=$(git diff origin/main...HEAD)
+    - |
+      docker run -d --name reviewer \
+        -e GITHUB_TOKEN=$COPILOT_PAT \
+        your-acr.azurecr.io/agent-in-a-box:latest
     - |
       # Call via MCP stdio (REST API planned — see spec 011)
       docker exec -i reviewer python -m server.mcp_server <<EOF
       {"method": "tools/call", "params": {"name": "start_review", "arguments": {"diff": "$(echo "$DIFF" | jq -Rs .)"}}}
       EOF
+  after_script:
+    - docker stop reviewer && docker rm reviewer || true
 ```
 
-With `FF_NETWORK_PER_BUILD`, service containers are reachable by their alias hostname (`reviewer`). Without it, use Docker's legacy linking.
+For Docker-in-Docker (DinD), add `services: [docker:dind]` and use the `docker:latest` image instead.
 
 ## Secrets Management
 
@@ -295,7 +301,7 @@ For regulated industries (finance, defense, government) that cannot allow outbou
 
 For organizations that want centralized control over AI API usage, deploy **Azure API Management** as an AI gateway ([reference architecture](https://learn.microsoft.com/en-us/ai/playbook/solutions/genai-gateway/reference-architectures/apim-based)):
 
-```
+```text
 Agent-in-a-Box  ──▶  APIM (internal VNet)  ──▶  Azure OpenAI (private endpoint)
                                              ──▶  Anthropic (via Azure Firewall)
                                              ──▶  OpenAI (via Azure Firewall)

@@ -89,13 +89,13 @@ async def run_baseline():
     token = os.environ.get("GITHUB_TOKEN", "")
     if not token:
         print("FAIL: GITHUB_TOKEN not set")
-        return
+        return False
 
     client = CopilotReviewClient()
     await client.start(github_token=token)
     if not client.is_connected:
         print("FAIL: Not connected")
-        return
+        return False
 
     print(f"Model: {client.selected_model}")
 
@@ -179,11 +179,13 @@ async def run_baseline():
             continue
         for f in r.get("findings", []):
             severities.add(f.severity.value)
+        remaining = list(r.get("findings", []))
         for expected in r.get("expected", []):
             total_expected += 1
-            for f in r.get("findings", []):
+            for i, f in enumerate(remaining):
                 if f.severity.value == expected["severity"].upper() and f.category.value == expected["category"].lower():
                     total_matched += 1
+                    remaining.pop(i)
                     break
 
     print()
@@ -196,7 +198,9 @@ async def run_baseline():
     print(f"  Classification:   {total_matched}/{total_expected} = {total_matched/total_expected*100:.0f}%" if total_expected else "  N/A")
 
     await client.stop()
+    return True
 
 
 if __name__ == "__main__":
-    asyncio.run(run_baseline())
+    success = asyncio.run(run_baseline())
+    sys.exit(0 if success else 1)
