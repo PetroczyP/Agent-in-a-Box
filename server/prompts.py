@@ -1,8 +1,8 @@
 """Reviewer persona prompts — T015, T010-T012.
 
 System prompt instructs the inner model to output JSON findings with
-severity/category/evidence.  Per contracts/review-engine.md Context Ordering
-section.
+severity/category/evidence.  Per specs/001-ai-code-reviewer/contracts/review-engine.md
+Context Ordering section.
 
 T010: Few-shot examples teach the expected output format (BUG + empty array).
 T011: FORMAT_REINFORCEMENT constant for end-of-context format reminder.
