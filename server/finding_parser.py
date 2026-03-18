@@ -183,21 +183,28 @@ class FindingParser:
 
         return self._unwrap_to_list(data)
 
+    _WRAPPER_KEYS = ("findings", "results", "items", "issues", "data")
+
     def _unwrap_to_list(self, data: Any) -> list[dict] | None:
         """Convert parsed JSON data to a list of finding dicts.
 
         - list → return directly
-        - dict with a list value → unwrap the first list value found
+        - dict → check well-known wrapper keys first, then fall back
+          to the sole list value if exactly one exists
         - anything else → None
         """
         if isinstance(data, list):
             return data
 
         if isinstance(data, dict):
-            # Find the first value that is a list (e.g. "findings", "results")
-            for value in data.values():
-                if isinstance(value, list):
-                    return value
+            # Prefer well-known wrapper keys
+            for key in self._WRAPPER_KEYS:
+                if key in data and isinstance(data[key], list):
+                    return data[key]
+            # Fall back to sole list value (reject ambiguous multi-list objects)
+            lists = [v for v in data.values() if isinstance(v, list)]
+            if len(lists) == 1:
+                return lists[0]
 
         return None
 

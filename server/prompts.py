@@ -101,7 +101,7 @@ When the code has no issues, return an empty JSON array:
 2. Use stable rule_id values (e.g., "missing-error-handling", "unused-import")
 3. Ground BUG and WARN findings in evidence — quote the specific code
 4. If you find no issues, return an empty array: []
-5. Do not include meta-commentary or prose outside the JSON array and its delimiters
+5. In your initial review response, do not include meta-commentary or prose outside the JSON array and its delimiters
 6. Always wrap your JSON output in a ```json code fence or between BEGIN_FINDINGS_JSON / END_FINDINGS_JSON delimiters
 """
 
