@@ -7,7 +7,7 @@ AgentinaBox is a Dockerized AI code review sidecar. It receives code via MCP too
 ## Architecture
 
 - **MCP Server**: Exposes `start_review`, `discuss`, `get_review_summary`, `list_sessions` tools via stdio transport (`docker exec -i <container> python -m server.mcp_server`)
-- **Inner Model**: GitHub Copilot SDK (Technical Preview) as primary; fallback to OpenAI, Anthropic, Gemini, Ollama
+- **Inner Model**: GitHub Copilot SDK (Technical Preview). Fallback backends (OpenAI, Anthropic, Gemini, Ollama) are planned in spec 006 but not yet implemented.
 - **Container**: Single Docker container (`python:3.11-slim-bookworm` + Node.js 22), started with `docker compose up -d`
 - **Transport**: MCP stdio only. REST API transport is planned (spec 011) but NOT implemented yet.
 

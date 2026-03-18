@@ -18,7 +18,7 @@ The container has **zero filesystem access** to the host. All code arrives via M
 
 ### Model-Agnostic Interface
 
-The MCP contract stays the same whether Copilot, Claude, OpenAI, or a local Ollama model runs inside. The consuming system doesn't care what model answers — it sends code, it gets structured findings. Swap backends with a config change, not a code change.
+The MCP contract stays the same regardless of which model runs inside. Today the Copilot SDK is implemented; fallback backends for Claude, OpenAI, Gemini, and Ollama are planned (spec 006). The consuming system doesn't care what model answers — it sends code, it gets structured findings.
 
 ### Scalable by Default
 

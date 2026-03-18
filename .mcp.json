@@ -2,7 +2,7 @@
   "mcpServers": {
     "code-reviewer": {
       "command": "docker",
-      "args": ["exec", "-i", "agent-in-a-box-review-server-1", "python", "-m", "server.mcp_server"]
+      "args": ["compose", "exec", "-T", "review-server", "python", "-m", "server.mcp_server"]
     }
   }
 }

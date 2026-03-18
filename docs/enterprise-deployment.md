@@ -131,14 +131,17 @@ jobs:
 
       - name: Submit review via MCP
         run: |
-          # Generate diff and file contents
-          DIFF=$(git diff origin/main...HEAD)
-
-          # Call Agent-in-a-Box via MCP stdio
+          # Build MCP payload with diff and changed file contents
           # (REST API transport planned — see spec 011)
-          docker exec -i reviewer python -m server.mcp_server <<EOF
-          {"method": "tools/call", "params": {"name": "start_review", "arguments": {"diff": "$(echo "$DIFF" | jq -Rs .)"}}}
-          EOF
+          DIFF=$(git diff origin/main...HEAD)
+          FILES=$(git diff --name-only origin/main...HEAD | while read f; do
+            [ -f "$f" ] && echo "{\"path\": $(echo "$f" | jq -R .), \"content\": $(cat "$f" | jq -Rs .)}"
+          done | jq -s 'map({(.path): .content}) | add // {}')
+
+          jq -n --arg diff "$DIFF" --argjson files "$FILES" '{
+            method: "tools/call",
+            params: {name: "start_review", arguments: {diff: $diff, files: $files}}
+          }' | docker exec -i reviewer python -m server.mcp_server
 
       - name: Post findings as PR comment
         run: |
@@ -176,11 +179,17 @@ steps:
     displayName: 'Start Agent-in-a-Box'
 
   - script: |
+      # Build MCP payload with diff and changed file contents
+      # (REST API planned — see spec 011)
       DIFF=$(git diff origin/main...HEAD)
-      # Call via MCP stdio (REST API planned — see spec 011)
-      docker exec -i reviewer python -m server.mcp_server <<EOF
-      {"method": "tools/call", "params": {"name": "start_review", "arguments": {"diff": "$(echo "$DIFF" | jq -Rs .)"}}}
-      EOF
+      FILES=$(git diff --name-only origin/main...HEAD | while read f; do
+        [ -f "$f" ] && echo "{\"path\": $(echo "$f" | jq -R .), \"content\": $(cat "$f" | jq -Rs .)}"
+      done | jq -s 'map({(.path): .content}) | add // {}')
+
+      jq -n --arg diff "$DIFF" --argjson files "$FILES" '{
+        method: "tools/call",
+        params: {name: "start_review", arguments: {diff: $diff, files: $files}}
+      }' | docker exec -i reviewer python -m server.mcp_server
     displayName: 'Submit code review via MCP'
 
   - script: docker stop reviewer && docker rm reviewer
