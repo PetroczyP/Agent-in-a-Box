@@ -136,10 +136,12 @@ class FindingParser:
     def _extract_json_strings(self, text: str) -> list[str]:
         """Extract JSON strings from trusted containers only.
 
-        Trust hierarchy:
-        1. Code-fenced blocks (```json ... ```) — highest priority
+        Collects candidates from all trusted containers:
+        1. Code-fenced blocks (```json ... ```)
         2. Sentinel-delimited blocks (BEGIN/END_FINDINGS_JSON)
-        3. Whole stripped text — handles bare JSON responses
+        Both are checked independently — code fences do not suppress
+        sentinel extraction.  Falls back to whole stripped text only
+        when neither container is found.
 
         Bare JSON embedded in prose (e.g., "Example: [{...}]") is NOT
         extracted.  This is the ambiguous zone where illustrative and
@@ -147,22 +149,28 @@ class FindingParser:
         to regex → NIT-wrap, which preserves the content without
         fabricating findings.
         """
+        results: list[str] = []
+
         # 1. Code-fenced blocks — support 3+ backtick fences with matching close
         matches = re.findall(r"(`{3,})json\s*\n?(.*?)\n?\1", text, re.DOTALL)
         if matches:
-            return [m[1].strip() for m in matches]
-        matches = re.findall(r"(`{3,})\s*\n?(.*?)\n?\1", text, re.DOTALL)
-        if matches:
-            return [m[1].strip() for m in matches]
+            results.extend(m[1].strip() for m in matches)
+        else:
+            matches = re.findall(r"(`{3,})\s*\n?(.*?)\n?\1", text, re.DOTALL)
+            if matches:
+                results.extend(m[1].strip() for m in matches)
 
-        # 2. Sentinel-delimited blocks
+        # 2. Sentinel-delimited blocks (always checked, even if code fences found)
         sentinel_pattern = re.compile(
             rf"{re.escape(self._SENTINEL_BEGIN)}\s*\n?(.*?)\n?\s*{re.escape(self._SENTINEL_END)}",
             re.DOTALL,
         )
         sentinel = sentinel_pattern.findall(text)
         if sentinel:
-            return [s.strip() for s in sentinel]
+            results.extend(s.strip() for s in sentinel)
+
+        if results:
+            return results
 
         # 3. Whole text as JSON (no container found)
         stripped = text.strip()
@@ -257,27 +265,35 @@ class FindingParser:
     def _extract_repair_candidates(self, text: str) -> list[str]:
         """Extract candidates for JSON repair from trusted containers.
 
-        Like _extract_json_strings, but stricter on the whole-text
-        fallback: only tries whole text if it starts with JSON syntax
-        ([ or {).  Prose starting with words is NOT repaired — that
-        would extract bare JSON from the ambiguous zone.
+        Collects candidates from code fences and sentinel blocks
+        independently — code fences do not suppress sentinel
+        extraction.  Stricter on the whole-text fallback: only tries
+        whole text if it starts with JSON syntax ([ or {).  Prose
+        starting with words is NOT repaired — that would extract bare
+        JSON from the ambiguous zone.
         """
+        results: list[str] = []
+
         # 1. Code-fenced blocks — support 3+ backtick fences with matching close
         matches = re.findall(r"(`{3,})json\s*\n?(.*?)\n?\1", text, re.DOTALL)
         if matches:
-            return [m[1].strip() for m in matches]
-        matches = re.findall(r"(`{3,})\s*\n?(.*?)\n?\1", text, re.DOTALL)
-        if matches:
-            return [m[1].strip() for m in matches]
+            results.extend(m[1].strip() for m in matches)
+        else:
+            matches = re.findall(r"(`{3,})\s*\n?(.*?)\n?\1", text, re.DOTALL)
+            if matches:
+                results.extend(m[1].strip() for m in matches)
 
-        # 2. Sentinel-delimited blocks
+        # 2. Sentinel-delimited blocks (always checked, even if code fences found)
         sentinel_pattern = re.compile(
             rf"{re.escape(self._SENTINEL_BEGIN)}\s*\n?(.*?)\n?\s*{re.escape(self._SENTINEL_END)}",
             re.DOTALL,
         )
         sentinel = sentinel_pattern.findall(text)
         if sentinel:
-            return [s.strip() for s in sentinel]
+            results.extend(s.strip() for s in sentinel)
+
+        if results:
+            return results
 
         # 3. Whole text only if it starts with JSON syntax
         stripped = text.strip()
