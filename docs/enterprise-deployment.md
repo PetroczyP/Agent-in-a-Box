@@ -118,6 +118,8 @@ jobs:
     runs-on: self-hosted  # runner in your Azure VNet
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history needed for git diff against base branch
 
       - name: Start Agent-in-a-Box container
         run: |
