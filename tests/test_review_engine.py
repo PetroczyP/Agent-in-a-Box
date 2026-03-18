@@ -2,19 +2,14 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, call, patch
+from unittest.mock import AsyncMock
 
 import pytest
 
 from server.denylist import ContentDenylist
 from server.models import (
-    Category,
     DiscussRequest,
-    Finding,
-    FindingStatus,
-    Location,
     ReviewBundle,
-    ReviewResult,
     Severity,
     SessionStatus,
 )
@@ -355,7 +350,7 @@ class TestFindingStability:
             session_id=review_result.session_id,
             message="I disagree with the first finding",
         )
-        discuss_result = await engine.discuss(request)
+        await engine.discuss(request)
 
         # Original finding IDs should still exist in the session
         session = engine._store.get(review_result.session_id)
@@ -521,3 +516,189 @@ class TestListSessions:
         assert isinstance(info.by_severity, dict)
         assert isinstance(info.by_category, dict)
         assert info.finding_count >= 0
+
+
+# --- T019-T020: US3 Discuss reinforcement tests ---
+
+
+class TestDiscussReinforcement:
+    """T019: discuss() prompt includes DISCUSS_REINFORCEMENT appended after user message."""
+
+    async def test_discuss_prompt_includes_reinforcement(self, engine, sample_review_bundle):
+        """T019: The prompt sent to Copilot via send_followup includes DISCUSS_REINFORCEMENT."""
+        from server.prompts import DISCUSS_REINFORCEMENT
+
+        review_result = await engine.start_review(sample_review_bundle)
+        request = DiscussRequest(
+            session_id=review_result.session_id,
+            message="I disagree with F-001",
+        )
+        await engine.discuss(request)
+
+        engine._copilot.send_followup.assert_called_once()
+        call_kwargs = engine._copilot.send_followup.call_args
+        prompt = call_kwargs.kwargs.get("prompt") or call_kwargs.args[1]
+        assert DISCUSS_REINFORCEMENT in prompt
+
+    async def test_reinforcement_after_user_message(self, engine, sample_review_bundle):
+        """T019: Reinforcement comes after user message and additional files."""
+        from server.prompts import DISCUSS_REINFORCEMENT
+
+        review_result = await engine.start_review(sample_review_bundle)
+        request = DiscussRequest(
+            session_id=review_result.session_id,
+            message="I disagree with F-001",
+            additional_files={"extra.py": "print('extra')"},
+        )
+        await engine.discuss(request)
+
+        call_kwargs = engine._copilot.send_followup.call_args
+        prompt = call_kwargs.kwargs.get("prompt") or call_kwargs.args[1]
+        msg_pos = prompt.find("I disagree with F-001")
+        extra_pos = prompt.find("extra.py")
+        reinforce_pos = prompt.find(DISCUSS_REINFORCEMENT)
+        assert msg_pos != -1, "User message not found in prompt"
+        assert extra_pos != -1, "Additional file header not found in prompt"
+        assert reinforce_pos != -1, "DISCUSS_REINFORCEMENT not found in prompt"
+        assert msg_pos < reinforce_pos, "Reinforcement must come after user message"
+        assert extra_pos < reinforce_pos, "Reinforcement must come after additional files"
+
+
+class TestDualFormatDiscussParsing:
+    """T020: Parser extracts findings from dual-format response (text + JSON fence)."""
+
+    async def test_dual_format_response_parsed(self, mock_copilot_client):
+        """Conversational text + JSON code fence at end → parser extracts findings."""
+        dual_response = """I looked at the code and I agree with your concern. The exception handling is indeed too broad.
+
+Here are my updated findings:
+
+```json
+[{"rule_id": "broad-except", "severity": "WARN", "category": "correctness", "message": "Bare except catches KeyboardInterrupt", "file": "foo.py", "start_line": 2, "end_line": 3, "confidence": "high", "evidence": "except:\\n    pass"}]
+```"""
+        mock_copilot_client.send_followup = AsyncMock(return_value=dual_response)
+        engine = ReviewEngine(
+            copilot=mock_copilot_client,
+            store=SessionStore(),
+            denylist=ContentDenylist(),
+        )
+
+        bundle = ReviewBundle(
+            diff="--- a/foo.py\n+++ b/foo.py",
+            files={"foo.py": "try:\n    x = 1\nexcept:\n    pass\n"},
+            branch="test",
+        )
+        review_result = await engine.start_review(bundle)
+        request = DiscussRequest(
+            session_id=review_result.session_id,
+            message="What about the exception handling?",
+        )
+        result = await engine.discuss(request)
+
+        # FR-010: DiscussResult.response contains full text (conversational + JSON)
+        assert "I looked at the code" in result.response
+        assert "broad-except" in result.response or "```json" in result.response
+
+    async def test_dual_format_preserves_full_response(self, mock_copilot_client):
+        """FR-010: DiscussResult.response stores the FULL text, not just JSON."""
+        dual_response = "Great question! Let me reconsider.\n\n```json\n[]\n```"
+        mock_copilot_client.send_followup = AsyncMock(return_value=dual_response)
+        engine = ReviewEngine(
+            copilot=mock_copilot_client,
+            store=SessionStore(),
+            denylist=ContentDenylist(),
+        )
+        bundle = ReviewBundle(diff="diff", files={"a.py": "pass"}, branch="test")
+        review_result = await engine.start_review(bundle)
+        request = DiscussRequest(
+            session_id=review_result.session_id,
+            message="Reconsider?",
+        )
+        result = await engine.discuss(request)
+        assert result.response == dual_response
+
+
+class TestDiscussReconciliation:
+    """M-1: Verify discuss() drives updated_findings via reconciliation,
+    not just preserving raw response text."""
+
+    async def test_discuss_new_finding_appears_in_updated_findings(
+        self, mock_copilot_client
+    ):
+        """When discuss response contains a NEW finding, it should appear
+        in DiscussResult.updated_findings alongside originals."""
+        # Initial review returns one finding
+        review_response = (
+            '```json\n'
+            '[{"severity": "BUG", "category": "correctness", '
+            '"rule_id": "div-by-zero", "message": "Division by zero", '
+            '"file": "math.py", "start_line": 5}]\n'
+            '```'
+        )
+        # Discuss adds a second finding
+        discuss_response = (
+            "Good point, I also noticed another issue.\n\n"
+            '```json\n'
+            '[{"severity": "WARN", "category": "correctness", '
+            '"rule_id": "broad-except", "message": "Bare except catches all", '
+            '"file": "math.py", "start_line": 10}]\n'
+            '```'
+        )
+        mock_copilot_client.send_review = AsyncMock(return_value=review_response)
+        mock_copilot_client.send_followup = AsyncMock(return_value=discuss_response)
+        engine = ReviewEngine(
+            copilot=mock_copilot_client,
+            store=SessionStore(),
+            denylist=ContentDenylist(),
+        )
+        bundle = ReviewBundle(
+            diff="--- a/math.py\n+++ b/math.py",
+            files={"math.py": "x = 1 / n\ntry:\n    pass\nexcept:\n    pass\n"},
+            branch="test",
+        )
+        review_result = await engine.start_review(bundle)
+        assert len(review_result.findings) == 1
+
+        request = DiscussRequest(
+            session_id=review_result.session_id,
+            message="Any other issues?",
+        )
+        result = await engine.discuss(request)
+
+        # Reconciliation: original + new finding
+        assert len(result.updated_findings) == 2
+        rule_ids = {f.rule_id for f in result.updated_findings}
+        assert "div-by-zero" in rule_ids
+        assert "broad-except" in rule_ids
+
+    async def test_discuss_empty_findings_preserves_originals(
+        self, mock_copilot_client
+    ):
+        """When discuss response has no new findings, originals are preserved."""
+        review_response = (
+            '```json\n'
+            '[{"severity": "BUG", "message": "bug", '
+            '"file": "a.py", "start_line": 1}]\n'
+            '```'
+        )
+        discuss_response = "I agree with the finding.\n\n```json\n[]\n```"
+        mock_copilot_client.send_review = AsyncMock(return_value=review_response)
+        mock_copilot_client.send_followup = AsyncMock(return_value=discuss_response)
+        engine = ReviewEngine(
+            copilot=mock_copilot_client,
+            store=SessionStore(),
+            denylist=ContentDenylist(),
+        )
+        bundle = ReviewBundle(
+            diff="diff", files={"a.py": "x=1\n"}, branch="test"
+        )
+        review_result = await engine.start_review(bundle)
+        request = DiscussRequest(
+            session_id=review_result.session_id,
+            message="Thoughts?",
+        )
+        result = await engine.discuss(request)
+
+        # Original findings preserved
+        assert len(result.updated_findings) == 1
+        assert result.updated_findings[0].severity == Severity.BUG

@@ -160,3 +160,25 @@ Either agent SHOULD propose new anti-patterns when a recurring mistake is identi
 **Correct pattern**: Every finding must answer: (1) What specific artifact/line is wrong? (2) What concrete failure would this cause? (3) What would "fixed" look like? Use the format: "[artifact:line] does X, but [spec/requirement] requires Y, which would cause [specific failure]."
 
 **First observed**: n/a (preventive, based on protocol norms)
+
+---
+
+## AP-007: Task Redefinition Instead of Escalation
+
+**Applies to**: builder
+**Phase**: build, test, release
+**Severity**: high
+
+**Symptoms**:
+- Builder edits accepted task definitions in tasks.md to match what actually happened
+- "Addressed by re-scoping task definitions" appears in builder.md
+- Task descriptions gain qualifiers or NOTE sections explaining why the original requirement doesn't apply
+- Dependency blocks contradict task descriptions because only one was updated
+
+**Problem**: Silently changing accepted requirements erodes trust and wastes review rounds. The judge catches the redefinition, the builder defends it, and the cycle repeats until escalation — consuming rounds that could have been avoided.
+
+**Root cause**: The builder encounters a gap between the plan and reality (e.g., wrong token type, missed baseline timing) and tries to "fix" it by adjusting the plan rather than flagging the deviation. This feels efficient but violates the separation of concerns: the coordinator owns scope decisions.
+
+**Correct pattern**: When a task can't be satisfied as written, escalate immediately to the coordinator with: (1) what the plan says, (2) what actually happened, (3) why, (4) proposed resolution. Let the coordinator decide whether to re-scope. Never edit accepted task definitions unilaterally.
+
+**First observed**: 008-prompt-tuning, release rounds 2-4 (T002b token type, T030 baseline timing)

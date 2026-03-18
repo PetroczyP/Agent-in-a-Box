@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "code-reviewer": {
+      "command": "docker",
+      "args": ["compose", "exec", "-T", "review-server", "python", "-m", "server.mcp_server"]
+    }
+  }
+}
