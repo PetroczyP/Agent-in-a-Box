@@ -147,8 +147,10 @@ class FindingParser:
         to regex → NIT-wrap, which preserves the content without
         fabricating findings.
         """
-        # 1. Code-fenced blocks (highest priority)
-        fenced = re.findall(r"```(?:json)?\s*\n?(.*?)\n?```", text, re.DOTALL)
+        # 1. Code-fenced blocks — only ```json or plain ``` (no language tag)
+        fenced = re.findall(r"```json\s*\n?(.*?)\n?```", text, re.DOTALL)
+        if not fenced:
+            fenced = re.findall(r"```\s*\n?(.*?)\n?```", text, re.DOTALL)
         if fenced:
             return [s.strip() for s in fenced]
 
@@ -252,8 +254,10 @@ class FindingParser:
         ([ or {).  Prose starting with words is NOT repaired — that
         would extract bare JSON from the ambiguous zone.
         """
-        # 1. Code-fenced blocks
-        fenced = re.findall(r"```(?:json)?\s*\n?(.*?)\n?```", text, re.DOTALL)
+        # 1. Code-fenced blocks — only ```json or plain ``` (no language tag)
+        fenced = re.findall(r"```json\s*\n?(.*?)\n?```", text, re.DOTALL)
+        if not fenced:
+            fenced = re.findall(r"```\s*\n?(.*?)\n?```", text, re.DOTALL)
         if fenced:
             return [s.strip() for s in fenced]
 

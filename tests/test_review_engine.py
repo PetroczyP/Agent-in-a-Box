@@ -557,6 +557,9 @@ class TestDiscussReinforcement:
         msg_pos = prompt.find("I disagree with F-001")
         extra_pos = prompt.find("extra.py")
         reinforce_pos = prompt.find(DISCUSS_REINFORCEMENT)
+        assert msg_pos != -1, "User message not found in prompt"
+        assert extra_pos != -1, "Additional file header not found in prompt"
+        assert reinforce_pos != -1, "DISCUSS_REINFORCEMENT not found in prompt"
         assert msg_pos < reinforce_pos, "Reinforcement must come after user message"
         assert extra_pos < reinforce_pos, "Reinforcement must come after additional files"
 
