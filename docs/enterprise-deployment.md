@@ -8,8 +8,8 @@ How to deploy Agent-in-a-Box in enterprise CI/CD pipelines on Azure, with GitHub
 ┌──────────────────────────────────────────────────────────────┐
 │  Azure VNet                                                  │
 │                                                              │
-│  ┌───────────────┐       ┌─────────────────────┐            │
-│  │ CI Runner     │──HTTP─▶│ Agent-in-a-Box      │            │
+│  ┌───────────────┐  MCP  ┌─────────────────────┐            │
+│  │ CI Runner     │─stdio─▶│ Agent-in-a-Box      │            │
 │  │ (self-hosted) │◀──────│ (Container Apps /   │            │
 │  │               │       │  ACI / AKS)         │            │
 │  └───────────────┘       └─────────┬───────────┘            │
