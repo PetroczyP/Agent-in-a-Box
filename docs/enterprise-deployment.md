@@ -53,17 +53,16 @@ Only whitelist the backend(s) you are using.
 
 | FQDN | Purpose |
 |------|---------|
-| `github.com/login/*` | Authentication |
-| `api.github.com/user` | User validation |
-| `api.github.com/copilot_internal/*` | Copilot API |
+| `github.com` | Authentication (`/login/*`) |
+| `api.github.com` | User validation, Copilot API (`/user`, `/copilot_internal/*`) |
 | `copilot-proxy.githubusercontent.com` | Inference proxy |
-| `copilot-telemetry.githubusercontent.com/telemetry` | Telemetry |
-| `*.githubcopilot.com/*` | Copilot service |
+| `copilot-telemetry.githubusercontent.com` | Telemetry |
+| `*.githubcopilot.com` | Copilot service |
 | `*.individual.githubcopilot.com` | Individual plan |
 | `*.business.githubcopilot.com` | Business plan |
 | `*.enterprise.githubcopilot.com` | Enterprise plan |
 | `default.exp-tas.com` | Experimentation service |
-| `collector.github.com/*` | Metrics collection |
+| `collector.github.com` | Metrics collection |
 | `origin-tracker.githubusercontent.com` | Origin tracking |
 
 **Anthropic API** ([docs](https://platform.claude.com/docs/en/api/ip-addresses)):
