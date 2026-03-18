@@ -147,12 +147,13 @@ class FindingParser:
         to regex → NIT-wrap, which preserves the content without
         fabricating findings.
         """
-        # 1. Code-fenced blocks — only ```json or plain ``` (no language tag)
-        fenced = re.findall(r"```json\s*\n?(.*?)\n?```", text, re.DOTALL)
-        if not fenced:
-            fenced = re.findall(r"```\s*\n?(.*?)\n?```", text, re.DOTALL)
-        if fenced:
-            return [s.strip() for s in fenced]
+        # 1. Code-fenced blocks — support 3+ backtick fences with matching close
+        matches = re.findall(r"(`{3,})json\s*\n?(.*?)\n?\1", text, re.DOTALL)
+        if matches:
+            return [m[1].strip() for m in matches]
+        matches = re.findall(r"(`{3,})\s*\n?(.*?)\n?\1", text, re.DOTALL)
+        if matches:
+            return [m[1].strip() for m in matches]
 
         # 2. Sentinel-delimited blocks
         sentinel_pattern = re.compile(
@@ -261,12 +262,13 @@ class FindingParser:
         ([ or {).  Prose starting with words is NOT repaired — that
         would extract bare JSON from the ambiguous zone.
         """
-        # 1. Code-fenced blocks — only ```json or plain ``` (no language tag)
-        fenced = re.findall(r"```json\s*\n?(.*?)\n?```", text, re.DOTALL)
-        if not fenced:
-            fenced = re.findall(r"```\s*\n?(.*?)\n?```", text, re.DOTALL)
-        if fenced:
-            return [s.strip() for s in fenced]
+        # 1. Code-fenced blocks — support 3+ backtick fences with matching close
+        matches = re.findall(r"(`{3,})json\s*\n?(.*?)\n?\1", text, re.DOTALL)
+        if matches:
+            return [m[1].strip() for m in matches]
+        matches = re.findall(r"(`{3,})\s*\n?(.*?)\n?\1", text, re.DOTALL)
+        if matches:
+            return [m[1].strip() for m in matches]
 
         # 2. Sentinel-delimited blocks
         sentinel_pattern = re.compile(
