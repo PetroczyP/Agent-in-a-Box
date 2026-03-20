@@ -6,6 +6,7 @@ Per contracts/mcp-tools.md and research.md Decision 1 (FastMCP high-level API).
 
 from __future__ import annotations
 
+import math
 import os
 from contextlib import asynccontextmanager
 
@@ -28,11 +29,32 @@ from pydantic import ValidationError
 from server.review_engine import BundleTooLargeError, ContentDeniedError, ReviewEngine
 from server.store import SessionStore
 
+def _parse_timeout(env_var: str, default: float) -> float:
+    """Parse a timeout value from an environment variable.
+
+    Returns the default on missing, empty, or unparseable values.
+    """
+    raw = os.environ.get(env_var, "")
+    if not raw:
+        return default
+    try:
+        value = float(raw)
+        return value if value > 0 and math.isfinite(value) else default
+    except (ValueError, OverflowError):
+        return default
+
+
 # Initialize components
 _store = SessionStore()
 _denylist = ContentDenylist()
 _copilot = CopilotReviewClient()
-_engine = ReviewEngine(copilot=_copilot, store=_store, denylist=_denylist)
+_engine = ReviewEngine(
+    copilot=_copilot,
+    store=_store,
+    denylist=_denylist,
+    review_timeout=_parse_timeout("REVIEW_TIMEOUT", 120.0),
+    discuss_timeout=_parse_timeout("DISCUSS_TIMEOUT", 60.0),
+)
 
 
 async def _initialize_copilot():

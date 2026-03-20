@@ -63,12 +63,16 @@ class ReviewEngine:
         store: SessionStore,
         denylist: ContentDenylist,
         max_context_chars: int = 128_000,
+        review_timeout: float = 120.0,
+        discuss_timeout: float = 60.0,
     ) -> None:
         self._copilot = copilot
         self._store = store
         self._denylist = denylist
         self._parser = FindingParser()
         self._max_context_chars = max_context_chars
+        self._review_timeout = review_timeout
+        self._discuss_timeout = discuss_timeout
 
     async def start_review(self, bundle: ReviewBundle) -> ReviewResult:
         """Per contracts/review-engine.md steps 1-11."""
@@ -124,7 +128,7 @@ class ReviewEngine:
         response_text = await self._copilot.send_review(
             session_key=session_key,
             prompt=review_context,
-            timeout=60.0,
+            timeout=self._review_timeout,
         )
 
         # Step 8: Parse response into structured findings
@@ -234,7 +238,7 @@ class ReviewEngine:
         response_text = await self._copilot.send_followup(
             session_key=session.copilot_session_key,
             prompt=prompt,
-            timeout=30.0,
+            timeout=self._discuss_timeout,
         )
 
         # Step 6: Parse response and reconcile findings (T028)
