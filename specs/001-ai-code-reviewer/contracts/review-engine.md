@@ -20,8 +20,8 @@ class ReviewEngine:
         discuss_timeout: float = DEFAULT_DISCUSS_TIMEOUT,
     ) -> None: ...
     # review_timeout / discuss_timeout: seconds for Copilot SDK calls.
-    # Precedence: env var (REVIEW_TIMEOUT / DISCUSS_TIMEOUT) → constructor arg → module default.
-    # Parsed by _parse_timeout() in mcp_server.py; must be finite and > 0.
+    # Env vars (REVIEW_TIMEOUT / DISCUSS_TIMEOUT) are parsed in the composition root
+    # (mcp_server._parse_timeout) and passed as constructor args; must be finite and > 0.
 
     async def start_review(self, bundle: ReviewBundle) -> ReviewResult:
         """
