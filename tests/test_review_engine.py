@@ -618,6 +618,89 @@ Here are my updated findings:
         assert result.response == dual_response
 
 
+# --- Configurable timeouts (Issue #14) ---
+
+
+class TestConfigurableTimeouts:
+    """AC-1 through AC-4: ReviewEngine timeout constructor params."""
+
+    async def test_review_uses_default_timeout(self, mock_copilot_client):
+        """AC-1: Engine with no timeout args passes timeout=120.0 to send_review."""
+        engine = ReviewEngine(
+            copilot=mock_copilot_client,
+            store=SessionStore(),
+            denylist=ContentDenylist(),
+        )
+        bundle = ReviewBundle(
+            diff="--- a/f.py\n+++ b/f.py\n",
+            files={"f.py": "pass"},
+            branch="test",
+        )
+        await engine.start_review(bundle)
+        call_kwargs = mock_copilot_client.send_review.call_args
+        assert call_kwargs.kwargs["timeout"] == 120.0
+
+    async def test_discuss_uses_default_timeout(self, mock_copilot_client):
+        """AC-2: Engine with no timeout args passes timeout=60.0 to send_followup."""
+        engine = ReviewEngine(
+            copilot=mock_copilot_client,
+            store=SessionStore(),
+            denylist=ContentDenylist(),
+        )
+        bundle = ReviewBundle(
+            diff="--- a/f.py\n+++ b/f.py\n",
+            files={"f.py": "pass"},
+            branch="test",
+        )
+        result = await engine.start_review(bundle)
+        request = DiscussRequest(
+            session_id=result.session_id,
+            message="followup",
+        )
+        await engine.discuss(request)
+        call_kwargs = mock_copilot_client.send_followup.call_args
+        assert call_kwargs.kwargs["timeout"] == 60.0
+
+    async def test_review_uses_custom_timeout(self, mock_copilot_client):
+        """AC-3: Constructor review_timeout=200.0 is passed through."""
+        engine = ReviewEngine(
+            copilot=mock_copilot_client,
+            store=SessionStore(),
+            denylist=ContentDenylist(),
+            review_timeout=200.0,
+        )
+        bundle = ReviewBundle(
+            diff="--- a/f.py\n+++ b/f.py\n",
+            files={"f.py": "pass"},
+            branch="test",
+        )
+        await engine.start_review(bundle)
+        call_kwargs = mock_copilot_client.send_review.call_args
+        assert call_kwargs.kwargs["timeout"] == 200.0
+
+    async def test_discuss_uses_custom_timeout(self, mock_copilot_client):
+        """AC-4: Constructor discuss_timeout=90.0 is passed through."""
+        engine = ReviewEngine(
+            copilot=mock_copilot_client,
+            store=SessionStore(),
+            denylist=ContentDenylist(),
+            discuss_timeout=90.0,
+        )
+        bundle = ReviewBundle(
+            diff="--- a/f.py\n+++ b/f.py\n",
+            files={"f.py": "pass"},
+            branch="test",
+        )
+        result = await engine.start_review(bundle)
+        request = DiscussRequest(
+            session_id=result.session_id,
+            message="followup",
+        )
+        await engine.discuss(request)
+        call_kwargs = mock_copilot_client.send_followup.call_args
+        assert call_kwargs.kwargs["timeout"] == 90.0
+
+
 class TestDiscussReconciliation:
     """M-1: Verify discuss() drives updated_findings via reconciliation,
     not just preserving raw response text."""
