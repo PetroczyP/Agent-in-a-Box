@@ -54,6 +54,10 @@ class BundleTooLargeError(ValueError):
         super().__init__("bundle_too_large")
 
 
+DEFAULT_REVIEW_TIMEOUT: float = 120.0
+DEFAULT_DISCUSS_TIMEOUT: float = 60.0
+
+
 class ReviewEngine:
     """Core review orchestration. Stateless — delegates persistence to SessionStore."""
 
@@ -63,8 +67,8 @@ class ReviewEngine:
         store: SessionStore,
         denylist: ContentDenylist,
         max_context_chars: int = 128_000,
-        review_timeout: float = 120.0,
-        discuss_timeout: float = 60.0,
+        review_timeout: float = DEFAULT_REVIEW_TIMEOUT,
+        discuss_timeout: float = DEFAULT_DISCUSS_TIMEOUT,
     ) -> None:
         self._copilot = copilot
         self._store = store

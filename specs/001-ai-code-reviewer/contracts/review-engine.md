@@ -15,7 +15,13 @@ class ReviewEngine:
         copilot: CopilotReviewClient,
         store: SessionStore,
         denylist: ContentDenylist,
+        max_context_chars: int = 128_000,
+        review_timeout: float = DEFAULT_REVIEW_TIMEOUT,
+        discuss_timeout: float = DEFAULT_DISCUSS_TIMEOUT,
     ) -> None: ...
+    # review_timeout / discuss_timeout: seconds for Copilot SDK calls.
+    # Precedence: env var (REVIEW_TIMEOUT / DISCUSS_TIMEOUT) → constructor arg → module default.
+    # Parsed by _parse_timeout() in mcp_server.py; must be finite and > 0.
 
     async def start_review(self, bundle: ReviewBundle) -> ReviewResult:
         """

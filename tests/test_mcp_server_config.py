@@ -2,10 +2,6 @@
 
 from __future__ import annotations
 
-import os
-
-import pytest
-
 from server.mcp_server import _parse_timeout
 
 
@@ -50,4 +46,8 @@ class TestParseTimeout:
 
     def test_negative_inf_returns_default(self, monkeypatch):
         monkeypatch.setenv("REVIEW_TIMEOUT", "-inf")
+        assert _parse_timeout("REVIEW_TIMEOUT", 120.0) == 120.0
+
+    def test_nan_returns_default(self, monkeypatch):
+        monkeypatch.setenv("REVIEW_TIMEOUT", "nan")
         assert _parse_timeout("REVIEW_TIMEOUT", 120.0) == 120.0
