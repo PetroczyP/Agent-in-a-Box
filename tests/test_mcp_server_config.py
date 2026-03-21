@@ -51,3 +51,11 @@ class TestParseTimeout:
     def test_nan_returns_default(self, monkeypatch):
         monkeypatch.setenv("REVIEW_TIMEOUT", "nan")
         assert _parse_timeout("REVIEW_TIMEOUT", 120.0) == 120.0
+
+    def test_discuss_timeout_env_var(self, monkeypatch):
+        monkeypatch.setenv("DISCUSS_TIMEOUT", "45")
+        assert _parse_timeout("DISCUSS_TIMEOUT", 60.0) == 45.0
+
+    def test_discuss_timeout_invalid_returns_default(self, monkeypatch):
+        monkeypatch.setenv("DISCUSS_TIMEOUT", "nope")
+        assert _parse_timeout("DISCUSS_TIMEOUT", 60.0) == 60.0

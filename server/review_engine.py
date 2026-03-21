@@ -54,8 +54,8 @@ class BundleTooLargeError(ValueError):
         super().__init__("bundle_too_large")
 
 
-DEFAULT_REVIEW_TIMEOUT: float = 120.0
-DEFAULT_DISCUSS_TIMEOUT: float = 60.0
+DEFAULT_REVIEW_TIMEOUT: float = 120.0  # seconds
+DEFAULT_DISCUSS_TIMEOUT: float = 60.0  # seconds
 
 
 class ReviewEngine:

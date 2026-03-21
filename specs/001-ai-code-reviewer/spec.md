@@ -107,7 +107,7 @@ Claude Code wants to check whether there are any active review sessions (e.g., t
 
 - **FR-012**: `start_review` and `discuss` MUST accept an optional client-generated `idempotency_token`. Repeated calls with the same token MUST return the same result without creating duplicate sessions or messages.
 - **FR-013**: System MUST classify errors as either `retryable` (transient: rate limit, timeout, network) or `terminal` (auth failure, invalid request, model unavailable). The error response MUST include this classification.
-- **FR-014**: System MUST enforce configurable timeout budgets on Copilot SDK calls. Defaults: 120 seconds for `start_review` (configurable via `REVIEW_TIMEOUT` env var), 60 seconds for `discuss` (configurable via `DISCUSS_TIMEOUT` env var). Constructor arguments take precedence over env vars. On timeout, return a retryable error.
+- **FR-014**: System MUST enforce configurable timeout budgets on Copilot SDK calls. Defaults: 120 seconds for `start_review` (configurable via `REVIEW_TIMEOUT` env var), 60 seconds for `discuss` (configurable via `DISCUSS_TIMEOUT` env var). Env vars are resolved in the composition root and passed as constructor arguments; direct callers (e.g., tests) bypass env var parsing. On timeout, return a retryable error.
 
 #### Infrastructure
 

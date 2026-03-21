@@ -6,6 +6,7 @@ Per contracts/mcp-tools.md and research.md Decision 1 (FastMCP high-level API).
 
 from __future__ import annotations
 
+import logging
 import math
 import os
 from contextlib import asynccontextmanager
@@ -35,18 +36,33 @@ from server.review_engine import (
 )
 from server.store import SessionStore
 
+logger = logging.getLogger(__name__)
+
+
 def _parse_timeout(env_var: str, default: float) -> float:
     """Parse a timeout value from an environment variable.
 
-    Returns the default on missing, empty, or unparseable values.
+    Returns the default when the variable is missing, empty, non-numeric,
+    or not a finite positive number (rejects zero, negatives, inf, NaN).
+    Logs a warning when a non-empty value is rejected.
     """
     raw = os.environ.get(env_var, "")
     if not raw:
         return default
     try:
         value = float(raw)
-        return value if value > 0 and math.isfinite(value) else default
+        if value > 0 and math.isfinite(value):
+            return value
+        logger.warning(
+            "%s=%r is not a valid timeout (must be finite and > 0); using default %.1fs",
+            env_var, raw, default,
+        )
+        return default
     except (ValueError, OverflowError):
+        logger.warning(
+            "%s=%r is not a valid number; using default %.1fs",
+            env_var, raw, default,
+        )
         return default
 
 
