@@ -11,6 +11,8 @@ RUN apt-get update && \
 # Install Copilot CLI globally
 RUN npm install -g @github/copilot
 
+RUN mkdir -p /data && chmod 700 /data
+
 WORKDIR /app
 
 # Install Python dependencies

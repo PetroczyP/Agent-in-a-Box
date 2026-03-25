@@ -15,6 +15,7 @@ from server.copilot_client import (
     CopilotRateLimitError,
     CopilotTimeoutError,
     CopilotUnavailableError,
+    NoCredentialError,
 )
 from server.models import (
     DiscussResult,
@@ -165,6 +166,21 @@ class TestStartReviewHandler:
 
         response = await start_review(diff="d", files={"f.py": "pass"})
         assert response["error"] == "unavailable"
+        assert response["retryable"] is False
+
+    @pytest.mark.asyncio
+    async def test_no_credential_error_maps_correctly(self, _patch_engine):
+        """NoCredentialError must map to no_credential, not fall through to internal."""
+        from server.mcp_server import start_review
+
+        _patch_engine.start_review.side_effect = NoCredentialError(
+            "No credential configured. Set up a token at localhost:8080, "
+            "provide GITHUB_TOKEN env var, or mount a Docker secret at "
+            "/run/secrets/github_token."
+        )
+
+        response = await start_review(diff="d", files={"f.py": "pass"})
+        assert response["error"] == "no_credential"
         assert response["retryable"] is False
 
     @pytest.mark.asyncio

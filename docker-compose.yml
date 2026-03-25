@@ -2,15 +2,26 @@ services:
   review-server:
     build: .
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     environment:
       - GITHUB_TOKEN=${GITHUB_TOKEN}
       # Copilot SDK call timeouts in seconds (defaults: 120 for review, 60 for discuss)
       - REVIEW_TIMEOUT=${REVIEW_TIMEOUT:-120}
       - DISCUSS_TIMEOUT=${DISCUSS_TIMEOUT:-60}
+    volumes:
+      - review-data:/data
+    secrets:
+      - github_token
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
       interval: 30s
       timeout: 5s
       start_period: 10s
       retries: 3
+
+secrets:
+  github_token:
+    file: ${GITHUB_TOKEN_FILE:-/dev/null}
+
+volumes:
+  review-data:

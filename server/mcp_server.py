@@ -19,6 +19,7 @@ from server.copilot_client import (
     CopilotReviewClient,
     CopilotTimeoutError,
     CopilotUnavailableError,
+    NoCredentialError,
 )
 from server.denylist import ContentDenylist
 from server.models import (
@@ -82,23 +83,41 @@ _engine = ReviewEngine(
 async def _initialize_copilot():
     """Initialize Copilot client on startup.
 
-    If GITHUB_TOKEN is missing or SDK is unavailable, the server still starts.
-    Tools will return clear errors when called without a working Copilot backend.
+    Resolves credentials via CredentialResolver (Docker secret > env var > stored).
+    If no credential is available, stores a NoCredentialError so tools return a
+    clear error. If the SDK is unavailable, the server still starts.
     """
-    token = os.environ.get("GITHUB_TOKEN", "")
-    if not token:
+    from server.credential_store import CredentialStore
+    from server.credential_resolver import CredentialResolver
+
+    resolver = CredentialResolver(store=CredentialStore())
+    try:
+        resolved = resolver.resolve()
+    except OSError as e:
+        logger.error("Credential resolver failed: %s", e)
+        _copilot.set_startup_error(CopilotUnavailableError(
+            f"Failed to resolve credentials: {type(e).__name__}: {e}"
+        ))
         return
+    if resolved is None:
+        _copilot.set_startup_error(NoCredentialError(
+            "No credential configured. Set up a token at localhost:8080, "
+            "provide GITHUB_TOKEN env var, or mount a Docker secret at "
+            "/run/secrets/github_token."
+        ))
+        return
+    token = resolved.token
     try:
         await _copilot.start(github_token=token)
-        if _copilot.is_connected:
-            await _copilot.select_model()
     except Exception as e:
-        # Store the error so tools can re-raise it with correct classification
         from server.copilot_client import CopilotError
         if isinstance(e, CopilotError):
-            _copilot._startup_error = e
-        # Non-CopilotError exceptions (e.g. unexpected crashes) leave the client
-        # in uninitialized state; create_review_session will raise CopilotUnavailableError
+            _copilot.set_startup_error(e)
+        else:
+            logger.error("Unexpected error during Copilot initialization: %s", e, exc_info=True)
+            _copilot.set_startup_error(CopilotUnavailableError(
+                f"Copilot initialization failed unexpectedly: {type(e).__name__}: {e}"
+            ))
 
 
 @asynccontextmanager
@@ -166,6 +185,8 @@ async def start_review(
         if "idempotency_conflict" in msg:
             return {"error": "idempotency_conflict", "message": msg, "retryable": False}
         return {"error": "unknown", "message": msg, "retryable": False}
+    except NoCredentialError as e:
+        return {"error": "no_credential", "message": str(e), "retryable": False}
     except CopilotAuthError as e:
         return {"error": "auth_failed", "message": str(e), "retryable": False}
     except CopilotUnavailableError as e:

@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Credential Status{% endblock %}
+{% block content %}
+<h1>Credential Status</h1>
+
+<div class="card">
+    <h2>Stored Credential</h2>
+    <p class="token-display">{{ masked_token }}</p>
+    <p class="meta">
+        Source:
+        {% if source == "docker_secret" %}
+            Docker Secret
+        {% elif source == "env_var" %}
+            Environment Variable
+        {% elif source == "stored" %}
+            Encrypted Store
+        {% else %}
+            {{ source }}
+        {% endif %}
+    </p>
+</div>
+
+<a href="/settings" class="btn">Settings</a>
+{% endblock %}

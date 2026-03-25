@@ -11,8 +11,11 @@ with `github-copilot-sdk` installed.
 from __future__ import annotations
 
 import asyncio
+import logging
 import uuid
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 # --- Error hierarchy per copilot-client.md ---
@@ -48,6 +51,12 @@ class CopilotUnavailableError(CopilotError):
     retryable = False
 
 
+class NoCredentialError(CopilotError):
+    """No credential configured — terminal."""
+
+    retryable = False
+
+
 # Model preference order per research.md Decision 4
 MODEL_PREFERENCE = [
     "gpt-4o",
@@ -74,6 +83,10 @@ class CopilotReviewClient:
         self._github_token: str | None = None
         self._startup_error: CopilotError | None = None
 
+    def set_startup_error(self, error: "CopilotError") -> None:
+        """Set a startup error for deferred raising on first tool call."""
+        self._startup_error = error
+
     async def start(self, github_token: str) -> None:
         """Initialize CopilotClient, start CLI process, select model."""
         if not github_token:
@@ -94,9 +107,13 @@ class CopilotReviewClient:
             try:
                 if hasattr(self._sdk_client, "stop"):
                     await self._sdk_client.stop()
-            except Exception:
-                if hasattr(self._sdk_client, "force_stop"):
-                    await self._sdk_client.force_stop()
+            except Exception as e:
+                logger.warning("SDK client stop failed: %s, attempting force_stop", e)
+                try:
+                    if hasattr(self._sdk_client, "force_stop"):
+                        await self._sdk_client.force_stop()
+                except Exception as e2:
+                    logger.error("SDK client force_stop also failed: %s", e2)
         self._sdk_client = None
 
     async def get_available_models(self) -> list[dict[str, Any]]:
