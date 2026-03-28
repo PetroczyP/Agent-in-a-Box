@@ -242,7 +242,8 @@ class TestInitializeCopilotNonCopilotError:
 
         assert isinstance(mock_copilot._startup_error, CopilotUnavailableError)
         assert "RuntimeError" in str(mock_copilot._startup_error)
-        assert "segfault in SDK" in str(mock_copilot._startup_error)
+        # Raw exception text must NOT leak into user-facing error (security)
+        assert "segfault in SDK" not in str(mock_copilot._startup_error)
 
     @pytest.mark.asyncio
     async def test_runtime_error_logged(self, mock_copilot, caplog):
@@ -282,7 +283,8 @@ class TestInitializeCopilotResolverFailure:
 
         assert isinstance(mock_copilot._startup_error, CopilotUnavailableError)
         assert "OSError" in str(mock_copilot._startup_error)
-        assert "disk read failed" in str(mock_copilot._startup_error)
+        # Raw exception text must NOT leak into user-facing error (security)
+        assert "disk read failed" not in str(mock_copilot._startup_error)
 
     @pytest.mark.asyncio
     async def test_resolver_oserror_logged(self, mock_copilot, caplog):

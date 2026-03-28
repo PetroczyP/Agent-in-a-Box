@@ -94,9 +94,9 @@ async def _initialize_copilot():
     try:
         resolved = resolver.resolve()
     except OSError as e:
-        logger.error("Credential resolver failed: %s", e)
+        logger.error("Credential resolver failed (%s)", type(e).__name__)
         _copilot.set_startup_error(CopilotUnavailableError(
-            f"Failed to resolve credentials: {type(e).__name__}: {e}"
+            f"Failed to resolve credentials: {type(e).__name__}"
         ))
         return
     if resolved is None:
@@ -114,9 +114,13 @@ async def _initialize_copilot():
         if isinstance(e, CopilotError):
             _copilot.set_startup_error(e)
         else:
-            logger.error("Unexpected error during Copilot initialization: %s", e, exc_info=True)
+            logger.error(
+                "Unexpected error during Copilot initialization (%s)",
+                type(e).__name__,
+                exc_info=True,
+            )
             _copilot.set_startup_error(CopilotUnavailableError(
-                f"Copilot initialization failed unexpectedly: {type(e).__name__}: {e}"
+                f"Copilot initialization failed unexpectedly: {type(e).__name__}"
             ))
         return
 

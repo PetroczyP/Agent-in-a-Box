@@ -121,10 +121,10 @@ class CredentialStore:
         # Atomic write with restrictive permissions
         tmp_key = self._key_path + ".tmp"
         fd = os.open(tmp_key, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-        try:
-            os.write(fd, key)
-        finally:
-            os.close(fd)
+        with os.fdopen(fd, "wb", closefd=True) as fh:
+            fh.write(key)
+            fh.flush()
+            os.fsync(fh.fileno())
         os.replace(tmp_key, self._key_path)
         # Ensure final file has correct permissions
         os.chmod(self._key_path, stat.S_IRUSR | stat.S_IWUSR)
