@@ -113,6 +113,7 @@ def create_router(
 
         try:
             store.store(token)
+            store.update_last_validated()
         except OSError as e:
             logger.error("Failed to persist credential: %s", e)
             return templates.TemplateResponse(
@@ -165,6 +166,11 @@ def create_router(
             "error": None,
         }
 
+        if source == CredentialSource.NONE:
+            logger.warning("Rotation rejected: no credential configured")
+            ctx["error"] = "No token is configured. Please set one up first via /setup."
+            return templates.TemplateResponse(request, "settings.html", ctx)
+
         if source != CredentialSource.STORED:
             # Externally managed — reject rotation
             logger.warning("Rotation rejected: credential source is %s", source)
@@ -182,6 +188,7 @@ def create_router(
 
         try:
             store.store(token)
+            store.update_last_validated()
         except OSError as e:
             logger.error("Failed to persist credential: %s", e)
             ctx["error"] = "Failed to save the token to disk. Check that the /data/ volume is mounted and writable."

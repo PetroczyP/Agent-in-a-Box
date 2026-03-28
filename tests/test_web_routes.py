@@ -376,7 +376,7 @@ class TestPostSettingsRotate:
         client = TestClient(app)
         response = client.post("/settings/rotate", data={"token": "github_pat_newtoken12345"})
         assert response.status_code == 200
-        assert "managed externally" in response.text
+        assert "No token is configured" in response.text
         mock_store.store.assert_not_called()
 
 
