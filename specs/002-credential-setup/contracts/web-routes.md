@@ -94,7 +94,7 @@ FastAPI routes for credential management web UI (setup wizard, settings, status 
 ## Shared Helpers
 
 ```python
-def mask_token(token: str) -> str:
+def mask_token(token: str | None) -> str:
     """Mask token for display: 'github_pat_...XXXX' (prefix + last 4 chars).
 
     Returns empty string for None/empty input.

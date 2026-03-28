@@ -108,12 +108,12 @@ class CopilotReviewClient:
                 if hasattr(self._sdk_client, "stop"):
                     await self._sdk_client.stop()
             except Exception as e:
-                logger.warning("SDK client stop failed: %s, attempting force_stop", e)
+                logger.warning("SDK client stop failed (%s), attempting force_stop", type(e).__name__)
                 try:
                     if hasattr(self._sdk_client, "force_stop"):
                         await self._sdk_client.force_stop()
                 except Exception as e2:
-                    logger.error("SDK client force_stop also failed: %s", e2)
+                    logger.error("SDK client force_stop also failed (%s)", type(e2).__name__)
         self._sdk_client = None
 
     async def get_available_models(self) -> list[dict[str, Any]]:

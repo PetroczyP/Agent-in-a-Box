@@ -355,17 +355,26 @@ class TestDockerSecretOSError:
 
     def test_permission_error_logs_warning_returns_none(self, mock_store, tmp_path, monkeypatch, caplog):
         """PermissionError on Docker secret logs warning, returns None, resolver continues."""
+        import builtins
+
         secret_path = tmp_path / "github_token"
-        secret_path.write_text("github_pat_test1234")
-        secret_path.chmod(0o000)
         monkeypatch.setenv("GITHUB_TOKEN", "github_pat_from_env")
 
         resolver = CredentialResolver(store=mock_store, docker_secret_path=str(secret_path))
-        try:
-            with caplog.at_level(logging.WARNING, logger="server.credential_resolver"):
-                result = resolver.resolve()
-        finally:
-            secret_path.chmod(0o644)
+
+        # Patch open() to raise PermissionError only for the secret path.
+        # (chmod(0o000) is runner-dependent — fails under root / on Windows)
+        _real_open = builtins.open
+
+        def _open_permission_denied(path, *args, **kwargs):
+            if str(path) == str(secret_path):
+                raise PermissionError("Permission denied")
+            return _real_open(path, *args, **kwargs)
+
+        monkeypatch.setattr("builtins.open", _open_permission_denied)
+
+        with caplog.at_level(logging.WARNING, logger="server.credential_resolver"):
+            result = resolver.resolve()
 
         # Should fall through to env var, not crash
         assert result is not None

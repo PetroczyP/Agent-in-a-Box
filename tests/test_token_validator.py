@@ -248,21 +248,21 @@ class TestProbeGithubAuthNarrowCatch:
 
 class TestValidateCopilotAccessUnexpectedError:
     @pytest.mark.asyncio
-    async def test_unexpected_runtime_error_raises_unknown(self, validator, mock_copilot):
-        """Unexpected RuntimeError → TokenValidationError with error_type='unknown'."""
+    async def test_unexpected_runtime_error_raises_sdk(self, validator, mock_copilot):
+        """Unexpected RuntimeError → TokenValidationError with error_type='sdk'."""
         mock_copilot.start.side_effect = RuntimeError("something broke")
 
         with pytest.raises(TokenValidationError) as exc_info:
             await validator.validate_copilot_access("github_pat_test", github_auth_confirmed=True)
-        assert exc_info.value.error_type == "unknown"
+        assert exc_info.value.error_type == "sdk"
         assert "unexpected error" in exc_info.value.message.lower()
 
     @pytest.mark.asyncio
-    async def test_unexpected_os_error_raises_unknown(self, validator, mock_copilot):
-        """Unexpected OSError → TokenValidationError with error_type='unknown'."""
+    async def test_unexpected_os_error_raises_sdk(self, validator, mock_copilot):
+        """Unexpected OSError → TokenValidationError with error_type='sdk'."""
         mock_copilot.start.side_effect = OSError("disk failure")
 
         with pytest.raises(TokenValidationError) as exc_info:
             await validator.validate_copilot_access("github_pat_test", github_auth_confirmed=None)
-        assert exc_info.value.error_type == "unknown"
+        assert exc_info.value.error_type == "sdk"
         assert "Check container logs" in exc_info.value.message

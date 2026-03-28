@@ -44,8 +44,9 @@ def mask_token(token: str | None) -> str:
             prefix = p
             break
     if not prefix:
-        # Unknown prefix — show first 4 chars
-        prefix = token[:4] if len(token) > 4 else token
+        if len(token) <= 4:
+            return "..."
+        prefix = token[:4]
     suffix_len = 4
     if len(token) <= len(prefix) + suffix_len:
         return prefix + "..."
@@ -98,6 +99,7 @@ def create_router(
     @router.post("/setup")
     async def setup_post(request: Request, token: str = Form(...)):
         """Validate and store token. PRG pattern: redirect on success."""
+        token = token.strip()
         try:
             await validator.validate(token)
         except TokenValidationError as e:
@@ -168,6 +170,7 @@ def create_router(
                 },
             )
 
+        token = token.strip()
         try:
             await validator.validate(token)
         except TokenValidationError as e:

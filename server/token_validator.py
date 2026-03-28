@@ -201,6 +201,10 @@ class TokenValidator:
         client = self._copilot_client_factory()
         try:
             await client.start(token)
+            # start() can complete without raising even when SDK import failed
+            # (_init_sdk swallows ImportError, leaving is_connected=False).
+            if not client.is_connected:
+                raise CopilotUnavailableError("SDK not connected after start")
         except (ImportError, CopilotUnavailableError):
             raise TokenValidationError(_MSG_SDK, error_type="sdk")
         except CopilotAuthError:
@@ -218,7 +222,7 @@ class TokenValidator:
             raise TokenValidationError(
                 "An unexpected error occurred while validating Copilot access. "
                 "Check container logs for details and try again.",
-                error_type="unknown",
+                error_type="sdk",
             )
         finally:
             await client.stop()
@@ -228,6 +232,9 @@ class TokenValidator:
 
         Three-step orchestration with short-circuiting on format and 401 auth errors.
         """
+        # Normalize whitespace once at the boundary (paste artifacts, trailing newlines)
+        token = token.strip()
+
         # Step 1: Format check (local, no network)
         self.validate_format(token)
 
