@@ -124,7 +124,7 @@ gh api graphql \
   -F owner="$OWNER" -F name="$REPO" -F pr=$PR_NUMBER \
   -f query="$(cat /tmp/pr-threads.graphql)" > /tmp/pr-threads-raw.json
 
-# Parse: filter to unresolved+not-outdated, extract key fields, group by source
+# Parse: filter to unresolved (including outdated — GitHub UI still shows them), extract key fields, group by source
 python3 -c "
 import json, sys
 
@@ -143,9 +143,10 @@ unresolved = [
         'author': t['comments']['nodes'][0]['author']['login'] if t['comments']['nodes'] else 'unknown',
         'body': t['comments']['nodes'][0]['body'] if t['comments']['nodes'] else '',
         'comment_count': len(t['comments']['nodes']),
+        'is_outdated': t['isOutdated'],
     }
     for t in threads
-    if not t['isResolved'] and not t['isOutdated']
+    if not t['isResolved']
 ]
 
 # Classify source
@@ -174,6 +175,12 @@ print(json.dumps(result, indent=2))
 merge results. Repeat until all pages are fetched.
 
 Read `/tmp/pr-threads-parsed.json` to get the clean, filtered thread list.
+
+> **IMPORTANT — Include outdated threads:** Do NOT filter out `isOutdated` threads.
+> GitHub's UI still displays outdated unresolved threads, and they must be resolved
+> to clear the PR. The `is_outdated` field is included in the output so you can
+> note it when processing, but never skip a thread just because it's outdated.
+
 Only the `body` of the **first comment** in each thread is extracted (the original finding) —
 this keeps output small. If you need follow-up comments in a thread, fetch them individually
 when processing that specific thread in Step 3.
