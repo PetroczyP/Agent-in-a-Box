@@ -118,6 +118,16 @@ async def _initialize_copilot():
             _copilot.set_startup_error(CopilotUnavailableError(
                 f"Copilot initialization failed unexpectedly: {type(e).__name__}: {e}"
             ))
+        return
+
+    # start() can succeed without raising even when the SDK import failed
+    # (_init_sdk swallows ImportError, leaving is_connected=False).
+    if not _copilot.is_connected:
+        logger.error("Copilot SDK unavailable: client not connected after start()")
+        _copilot.set_startup_error(CopilotUnavailableError(
+            "Copilot SDK is not available. Ensure github-copilot-sdk is installed "
+            "and the Copilot CLI is running. Rebuild: docker compose build --no-cache"
+        ))
 
 
 @asynccontextmanager
