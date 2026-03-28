@@ -206,24 +206,24 @@ class TokenValidator:
             if not client.is_connected:
                 raise CopilotUnavailableError("SDK not connected after start")
         except (ImportError, CopilotUnavailableError):
-            raise TokenValidationError(_MSG_SDK, error_type="sdk")
+            raise TokenValidationError(_MSG_SDK, error_type="sdk") from None
         except CopilotAuthError:
             if github_auth_confirmed is True:
                 raise TokenValidationError(
                     _MSG_PERMISSION, error_type="permission"
-                )
+                ) from None
             else:
                 # Inconclusive probe — cannot distinguish auth from permission
                 raise TokenValidationError(
                     _MSG_AUTH_LOW_CONFIDENCE, error_type="auth"
-                )
+                ) from None
         except Exception as e:
             logger.error("Unexpected error during Copilot validation: %s", e, exc_info=True)
             raise TokenValidationError(
                 "An unexpected error occurred while validating Copilot access. "
                 "Check container logs for details and try again.",
                 error_type="sdk",
-            )
+            ) from e
         finally:
             await client.stop()
 
