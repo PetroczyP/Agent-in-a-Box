@@ -103,6 +103,7 @@ class CopilotReviewClient:
         self._sessions.clear()
         self._connected = False
         self._startup_error = None
+        self._github_token = None
         if self._sdk_client is not None:
             try:
                 if hasattr(self._sdk_client, "stop"):
@@ -233,7 +234,15 @@ class CopilotReviewClient:
         except ImportError:
             self._sdk_client = None
             self._available_models = []
+            self._startup_error = CopilotUnavailableError(
+                "github-copilot-sdk is not installed"
+            )
         except Exception as e:
+            if self._sdk_client is not None:
+                try:
+                    await self._sdk_client.stop()
+                except Exception:
+                    pass
             self._sdk_client = None
             self._available_models = []
             err_str = str(e).lower()

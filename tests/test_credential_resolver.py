@@ -22,6 +22,7 @@ from server.credential_resolver import CredentialResolver, CredentialSource, Res
 def mock_store():
     store = MagicMock()
     store.load.return_value = None
+    store.has_stored_credential.return_value = False
     return store
 
 
@@ -153,6 +154,7 @@ class TestGetSource:
     def test_returns_stored(self, mock_store, tmp_path, monkeypatch):
         monkeypatch.delenv("GITHUB_TOKEN", raising=False)
         mock_store.load.return_value = "github_pat_test1234"
+        mock_store.has_stored_credential.return_value = True
         resolver = CredentialResolver(
             store=mock_store,
             docker_secret_path=str(tmp_path / "nonexistent"),
@@ -211,6 +213,7 @@ class TestSourcePriorityIntegration:
         """SC-004 combo 3 (US3-AS3): stored only (no Docker secret, no env var) → stored used."""
         monkeypatch.delenv("GITHUB_TOKEN", raising=False)
         mock_store.load.return_value = "github_pat_from_stored"
+        mock_store.has_stored_credential.return_value = True
 
         resolver = CredentialResolver(
             store=mock_store,

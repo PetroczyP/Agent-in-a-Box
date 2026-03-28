@@ -133,6 +133,15 @@ class TestPostSetup:
         assert "Classic PATs" in response.text
         mock_store.store.assert_not_called()
 
+    def test_whitespace_stripped_before_store(self):
+        """Token whitespace is stripped before storing."""
+        app, mock_store, _, mock_validator = _create_test_app(resolver_result=None)
+        mock_validator.validate = AsyncMock()
+        client = TestClient(app, follow_redirects=False)
+        response = client.post("/setup", data={"token": "  github_pat_valid_token  \n"})
+        assert response.status_code in (302, 303)
+        mock_store.store.assert_called_once_with("github_pat_valid_token")
+
 
 class TestMaskToken:
     def test_masks_standard_token(self):
@@ -182,6 +191,12 @@ class TestMaskToken:
         from server.web_routes import mask_token
         assert mask_token(None) == ""
 
+    def test_very_short_unknown_token(self):
+        """mask_token handles very short tokens (<=4 chars) without known prefix."""
+        from server.web_routes import mask_token
+        assert mask_token("ab") == "..."
+        assert mask_token("abcd") == "..."
+
 
 class TestGetSettings:
     """T019: GET /settings tests."""
@@ -204,7 +219,7 @@ class TestGetSettings:
         # Full token NOT visible
         assert "github_pat_abcdefghijklmnop1234" not in response.text
         # Source shown
-        assert "Encrypted Store" in response.text
+        assert "Stored (encrypted)" in response.text
         # Change form visible (submit button present)
         assert 'action="/settings/rotate"' in response.text
         assert "Save" in response.text
@@ -353,6 +368,17 @@ class TestPostSettingsRotate:
         assert "managed externally" in response.text
         mock_store.store.assert_not_called()
 
+    def test_rotation_rejected_when_no_credential(self):
+        """Rotation rejected when no credential is configured."""
+        app, mock_store, _, _ = _create_test_app(
+            resolver_result=None, resolver_source=CredentialSource.NONE
+        )
+        client = TestClient(app)
+        response = client.post("/settings/rotate", data={"token": "github_pat_newtoken12345"})
+        assert response.status_code == 200
+        assert "managed externally" in response.text
+        mock_store.store.assert_not_called()
+
 
 class TestGetSettingsNoCredential:
     """S-5: GET /settings with no credential configured."""
@@ -366,8 +392,8 @@ class TestGetSettingsNoCredential:
         response = client.get("/settings")
 
         assert response.status_code == 200
-        # Source should be "none"
-        assert "none" in response.text.lower()
+        # Source should show "Not configured"
+        assert "not configured" in response.text.lower()
         # No rotation form should be visible (can_rotate is False)
         assert 'action="/settings/rotate"' not in response.text
 

@@ -24,6 +24,9 @@ from server.copilot_client import (
 )
 
 
+GITHUB_TOKEN_PREFIXES = ("github_pat_", "ghs_", "ghu_", "gho_", "ghp_")
+
+
 class TokenValidationError(Exception):
     """Raised when token validation fails."""
 
@@ -162,7 +165,7 @@ class TokenValidator:
         if token.startswith("ghs_") or token.startswith("ghu_"):
             raise TokenValidationError(_MSG_FORMAT_GITHUB_APP, error_type="format")
 
-        if not token.startswith("github_pat_"):
+        if not token.startswith(GITHUB_TOKEN_PREFIXES):
             raise TokenValidationError(_MSG_FORMAT_UNRECOGNIZED, error_type="format")
 
     async def _probe_github_auth(self, token: str) -> bool | None:
@@ -225,7 +228,10 @@ class TokenValidator:
                 error_type="sdk",
             ) from e
         finally:
-            await client.stop()
+            try:
+                await client.stop()
+            except Exception:
+                pass
 
     async def validate(self, token: str) -> None:
         """Full validation: format -> GitHub auth probe -> Copilot access.

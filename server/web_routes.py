@@ -19,6 +19,9 @@ from server.token_validator import TokenValidationError, TokenValidator
 
 logger = logging.getLogger(__name__)
 
+# Known GitHub token prefixes, longest first for greedy match
+_KNOWN_PREFIXES = ("github_pat_", "ghs_", "ghu_", "gho_", "ghp_")
+
 
 # --- Flash message mapping (query param ?msg= values) ---
 
@@ -36,8 +39,6 @@ def mask_token(token: str | None) -> str:
     """
     if not token:
         return ""
-    # Known GitHub token prefixes, longest first for greedy match
-    _KNOWN_PREFIXES = ("github_pat_", "ghs_", "ghu_", "gho_", "ghp_")
     prefix = ""
     for p in _KNOWN_PREFIXES:
         if token.startswith(p):
@@ -153,22 +154,22 @@ def create_router(
         """
         resolved = resolver.resolve()
         source = resolved.source if resolved else CredentialSource.NONE
+        can_rotate = source == CredentialSource.STORED
+        masked = mask_token(resolved.token) if resolved else None
+
+        ctx = {
+            "source": source.value,
+            "masked_token": masked,
+            "can_rotate": can_rotate,
+            "message": None,
+            "error": None,
+        }
 
         if source != CredentialSource.STORED:
             # Externally managed — reject rotation
             logger.warning("Rotation rejected: credential source is %s", source)
-            masked = mask_token(resolved.token) if resolved else None
-            return templates.TemplateResponse(
-                request,
-                "settings.html",
-                {
-                    "source": source.value,
-                    "masked_token": masked,
-                    "can_rotate": False,
-                    "message": None,
-                    "error": "Token is managed externally and cannot be rotated here.",
-                },
-            )
+            ctx["error"] = "Token is managed externally and cannot be rotated here."
+            return templates.TemplateResponse(request, "settings.html", ctx)
 
         token = token.strip()
         try:
@@ -176,35 +177,15 @@ def create_router(
         except TokenValidationError as e:
             # Validation failed — re-render with error, old token preserved
             logger.warning("Token validation failed: %s", e.error_type)
-            masked = mask_token(resolved.token) if resolved else None
-            return templates.TemplateResponse(
-                request,
-                "settings.html",
-                {
-                    "source": source.value,
-                    "masked_token": masked,
-                    "can_rotate": True,
-                    "message": None,
-                    "error": str(e),
-                },
-            )
+            ctx["error"] = str(e)
+            return templates.TemplateResponse(request, "settings.html", ctx)
 
         try:
             store.store(token)
         except OSError as e:
             logger.error("Failed to persist credential: %s", e)
-            masked = mask_token(resolved.token) if resolved else None
-            return templates.TemplateResponse(
-                request,
-                "settings.html",
-                {
-                    "source": source.value,
-                    "masked_token": masked,
-                    "can_rotate": True,
-                    "message": None,
-                    "error": "Failed to save the token to disk. Check that the /data/ volume is mounted and writable.",
-                },
-            )
+            ctx["error"] = "Failed to save the token to disk. Check that the /data/ volume is mounted and writable."
+            return templates.TemplateResponse(request, "settings.html", ctx)
 
         logger.info("Token rotated successfully")
         return RedirectResponse(url="/settings?msg=rotated", status_code=303)

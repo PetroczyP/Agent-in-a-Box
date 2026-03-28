@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class CredentialMetadata:
     created_at: datetime
-    last_validated_at: datetime
+    last_validated_at: datetime | None
 
 
 class CredentialStore:
@@ -33,29 +33,50 @@ class CredentialStore:
         self._enc_path = os.path.join(data_dir, "credentials.enc")
         self._meta_path = os.path.join(data_dir, "credential_meta.json")
 
+    def _ensure_data_dir(self) -> None:
+        """Raise if the data directory does not exist."""
+        if not os.path.isdir(self._data_dir):
+            raise FileNotFoundError(
+                f"Data directory does not exist: {self._data_dir}. "
+                f"Ensure the Docker volume is mounted."
+            )
+
     def store(self, token: str) -> None:
-        """Encrypt and persist a token. Creates Fernet key on first use."""
+        """Encrypt and persist a GitHub PAT, then write metadata."""
+        self._ensure_data_dir()
         key = self._get_or_create_key()
         f = Fernet(key)
-        encrypted = f.encrypt(token.encode("utf-8"))
-
-        # Atomic write for credentials.enc
+        encrypted = f.encrypt(token.encode())
         tmp_enc = self._enc_path + ".tmp"
-        with open(tmp_enc, "wb") as fh:
-            fh.write(encrypted)
-        os.replace(tmp_enc, self._enc_path)
-
-        # Write metadata
-        now = datetime.now(timezone.utc).isoformat()
-        existing_meta = self._read_meta_dict()
-        meta = {
-            "created_at": existing_meta.get("created_at", now),
-            "last_validated_at": now,
-        }
         tmp_meta = self._meta_path + ".tmp"
-        with open(tmp_meta, "w") as fh:
-            json.dump(meta, fh)
-        os.replace(tmp_meta, self._meta_path)
+        try:
+            # Write encrypted credential
+            fd = os.open(tmp_enc, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with os.fdopen(fd, "wb", closefd=True) as fh:
+                fh.write(encrypted)
+                fh.flush()
+                os.fsync(fh.fileno())
+            os.replace(tmp_enc, self._enc_path)
+            # Write metadata
+            existing = self._read_meta_dict()
+            now = datetime.now(timezone.utc).isoformat()
+            meta = {
+                "created_at": existing.get("created_at", now),
+                "last_validated_at": existing.get("last_validated_at"),
+            }
+            fd = os.open(tmp_meta, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with os.fdopen(fd, "w", closefd=True) as fh:
+                json.dump(meta, fh)
+                fh.flush()
+                os.fsync(fh.fileno())
+            os.replace(tmp_meta, self._meta_path)
+        finally:
+            # Clean up orphaned temp files on any failure
+            for tmp in (tmp_enc, tmp_meta):
+                try:
+                    os.unlink(tmp)
+                except FileNotFoundError:
+                    pass
 
     def load(self) -> str | None:
         """Load and decrypt the stored token. Returns None if unavailable."""
@@ -71,7 +92,7 @@ class CredentialStore:
             with open(self._enc_path, "rb") as fh:
                 encrypted = fh.read()
             return f.decrypt(encrypted).decode("utf-8")
-        except (InvalidToken, ValueError) as e:
+        except (InvalidToken, ValueError, FileNotFoundError) as e:
             logger.warning("Failed to decrypt credential: %s", type(e).__name__)
             return None
 
@@ -89,24 +110,35 @@ class CredentialStore:
         if not meta:
             return None
         try:
+            raw_validated = meta.get("last_validated_at")
             return CredentialMetadata(
                 created_at=datetime.fromisoformat(meta["created_at"]),
-                last_validated_at=datetime.fromisoformat(meta["last_validated_at"]),
+                last_validated_at=datetime.fromisoformat(raw_validated) if raw_validated else None,
             )
         except (KeyError, ValueError, TypeError) as e:
             logger.warning("credential_meta.json has malformed data (%s) — returning None", type(e).__name__)
             return None
 
     def update_last_validated(self) -> None:
-        """Update last_validated_at in credential_meta.json to now."""
+        """Update the last_validated_at timestamp in metadata."""
         meta = self._read_meta_dict()
         if not meta:
             return
         meta["last_validated_at"] = datetime.now(timezone.utc).isoformat()
         tmp_meta = self._meta_path + ".tmp"
-        with open(tmp_meta, "w") as fh:
-            json.dump(meta, fh)
-        os.replace(tmp_meta, self._meta_path)
+        try:
+            fd = os.open(tmp_meta, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with os.fdopen(fd, "w", closefd=True) as fh:
+                json.dump(meta, fh)
+                fh.flush()
+                os.fsync(fh.fileno())
+            os.replace(tmp_meta, self._meta_path)
+        except OSError:
+            # Metadata freshness is non-critical; log and continue
+            try:
+                os.unlink(tmp_meta)
+            except FileNotFoundError:
+                pass
 
     def has_stored_credential(self) -> bool:
         """Check if credentials.enc exists (without decrypting)."""

@@ -95,8 +95,8 @@ def _patch_resolver(resolve_return):
     mock_cls = MagicMock()
     mock_cls.return_value.resolve.return_value = resolve_return
     return (
-        patch("server.credential_store.CredentialStore"),
-        patch("server.credential_resolver.CredentialResolver", mock_cls),
+        patch("server.mcp_server.CredentialStore"),
+        patch("server.mcp_server.CredentialResolver", mock_cls),
     )
 
 
@@ -186,6 +186,17 @@ class TestInitializeCopilotWithToken:
 
         assert isinstance(mock_copilot._startup_error, CopilotAuthError)
 
+    @pytest.mark.asyncio
+    async def test_not_connected_after_start_sets_unavailable(self, mock_copilot):
+        """Post-start is_connected=False sets CopilotUnavailableError."""
+        mock_copilot.is_connected = False
+        cred = ResolvedCredential(token="github_pat_abc123", source=CredentialSource.STORED)
+        p1, p2 = _patch_resolver(cred)
+        with p1, p2:
+            await _initialize_copilot()
+        assert isinstance(mock_copilot._startup_error, CopilotUnavailableError)
+        assert "not available" in str(mock_copilot._startup_error).lower()
+
 
 class TestInitializeCopilotRotation:
     """Fresh _initialize_copilot() after rotation picks up the new token."""
@@ -198,16 +209,16 @@ class TestInitializeCopilotRotation:
         # First call: old token
         resolver_cls = MagicMock()
         resolver_cls.return_value.resolve.return_value = old_cred
-        with patch("server.credential_store.CredentialStore"), \
-             patch("server.credential_resolver.CredentialResolver", resolver_cls):
+        with patch("server.mcp_server.CredentialStore"), \
+             patch("server.mcp_server.CredentialResolver", resolver_cls):
             await _initialize_copilot()
         mock_copilot.start.assert_awaited_with(github_token="github_pat_OLD")
 
         # Simulate rotation: second call picks up new token
         resolver_cls2 = MagicMock()
         resolver_cls2.return_value.resolve.return_value = new_cred
-        with patch("server.credential_store.CredentialStore"), \
-             patch("server.credential_resolver.CredentialResolver", resolver_cls2):
+        with patch("server.mcp_server.CredentialStore"), \
+             patch("server.mcp_server.CredentialResolver", resolver_cls2):
             await _initialize_copilot()
         mock_copilot.start.assert_awaited_with(github_token="github_pat_NEW")
 
@@ -218,8 +229,8 @@ class TestInitializeCopilotRotation:
         resolver_cls = MagicMock()
         resolver_cls.return_value.resolve.return_value = cred
 
-        with patch("server.credential_store.CredentialStore") as store_cls, \
-             patch("server.credential_resolver.CredentialResolver", resolver_cls):
+        with patch("server.mcp_server.CredentialStore") as store_cls, \
+             patch("server.mcp_server.CredentialResolver", resolver_cls):
             await _initialize_copilot()
             await _initialize_copilot()
 
@@ -277,8 +288,8 @@ class TestInitializeCopilotResolverFailure:
         """OSError from resolver.resolve() is wrapped in CopilotUnavailableError."""
         resolver_cls = MagicMock()
         resolver_cls.return_value.resolve.side_effect = OSError("disk read failed")
-        with patch("server.credential_store.CredentialStore"), \
-             patch("server.credential_resolver.CredentialResolver", resolver_cls):
+        with patch("server.mcp_server.CredentialStore"), \
+             patch("server.mcp_server.CredentialResolver", resolver_cls):
             await _initialize_copilot()
 
         assert isinstance(mock_copilot._startup_error, CopilotUnavailableError)
@@ -291,8 +302,8 @@ class TestInitializeCopilotResolverFailure:
         """OSError from resolver.resolve() is logged at ERROR level."""
         resolver_cls = MagicMock()
         resolver_cls.return_value.resolve.side_effect = OSError("disk read failed")
-        with patch("server.credential_store.CredentialStore"), \
-             patch("server.credential_resolver.CredentialResolver", resolver_cls), \
+        with patch("server.mcp_server.CredentialStore"), \
+             patch("server.mcp_server.CredentialResolver", resolver_cls), \
              caplog.at_level(logging.ERROR, logger="server.mcp_server"):
             await _initialize_copilot()
 
@@ -303,8 +314,8 @@ class TestInitializeCopilotResolverFailure:
         """When resolver crashes, start() is never called."""
         resolver_cls = MagicMock()
         resolver_cls.return_value.resolve.side_effect = OSError("disk read failed")
-        with patch("server.credential_store.CredentialStore"), \
-             patch("server.credential_resolver.CredentialResolver", resolver_cls):
+        with patch("server.mcp_server.CredentialStore"), \
+             patch("server.mcp_server.CredentialResolver", resolver_cls):
             await _initialize_copilot()
 
         mock_copilot.start.assert_not_called()

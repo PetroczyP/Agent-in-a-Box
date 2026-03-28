@@ -19,6 +19,7 @@ def mock_copilot():
     client = AsyncMock()
     client.start = AsyncMock()
     client.stop = AsyncMock()
+    client.is_connected = True
     client._available_models = [{"id": "gpt-4o", "name": "gpt-4o"}]
     return client
 
@@ -87,6 +88,12 @@ class TestValidateFormat:
         assert exc_info.value.error_type == "format"
         assert "github_pat_" in exc_info.value.message
         assert "github.com/settings/tokens?type=beta" in exc_info.value.message
+
+    def test_rejects_none(self, validator):
+        """validate_format rejects None input."""
+        with pytest.raises(TokenValidationError) as exc_info:
+            validator.validate_format(None)
+        assert exc_info.value.error_type == "format"
 
 
 class TestProbeGithubAuth:
@@ -192,6 +199,14 @@ class TestValidateCopilotAccess:
         assert "container configuration issue" in exc_info.value.message
         assert "docs.github.com/en/copilot" in exc_info.value.message
 
+    @pytest.mark.asyncio
+    async def test_sdk_error_when_not_connected_after_start(self, validator, mock_copilot):
+        """validate_copilot_access raises sdk error when client not connected after start."""
+        mock_copilot.is_connected = False
+        with pytest.raises(TokenValidationError) as exc_info:
+            await validator.validate_copilot_access("github_pat_test12345678", github_auth_confirmed=True)
+        assert exc_info.value.error_type == "sdk"
+
 
 class TestValidateOrchestration:
     @pytest.mark.asyncio
@@ -226,6 +241,14 @@ class TestValidateOrchestration:
             mock_get.return_value = 403
             await validator.validate("github_pat_valid_token")
         mock_copilot.start.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_whitespace_stripped_before_format_check(self, validator, mock_copilot):
+        """validate() strips whitespace before checking format."""
+        with patch("server.token_validator._http_get_status") as mock_get:
+            mock_get.return_value = 200
+            # Token with whitespace should pass if the stripped version is valid
+            await validator.validate("  github_pat_test12345678  \n")
 
 
 class TestProbeGithubAuthNarrowCatch:

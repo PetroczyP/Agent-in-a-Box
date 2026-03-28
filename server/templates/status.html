@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_macros.html" import source_label %}
 {% block title %}Credential Status{% endblock %}
 {% block content %}
 <h1>Credential Status</h1>
@@ -7,16 +8,7 @@
     <h2>Active Credential</h2>
     <p class="token-display">{{ masked_token }}</p>
     <p class="meta">
-        Source:
-        {% if source == "docker_secret" %}
-            Docker Secret
-        {% elif source == "env_var" %}
-            Environment Variable
-        {% elif source == "stored" %}
-            Encrypted Store
-        {% else %}
-            {{ source }}
-        {% endif %}
+        Source: {{ source_label(source) }}
     </p>
 </div>
 

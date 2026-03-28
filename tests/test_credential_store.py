@@ -140,9 +140,18 @@ class TestGetMetadata:
         assert meta is not None
         assert isinstance(meta, CredentialMetadata)
         assert isinstance(meta.created_at, datetime)
-        assert isinstance(meta.last_validated_at, datetime)
+        # last_validated_at is None until update_last_validated() is called
+        assert meta.last_validated_at is None
 
     def test_returns_none_when_no_metadata(self, store):
+        assert store.get_metadata() is None
+
+    def test_returns_none_with_missing_keys(self, store, data_dir):
+        """get_metadata returns None when JSON has missing keys."""
+        store.store("github_pat_test1234")
+        meta_path = os.path.join(data_dir, "credential_meta.json")
+        with open(meta_path, "w") as f:
+            json.dump({"some_other_key": "value"}, f)
         assert store.get_metadata() is None
 
 
@@ -152,15 +161,25 @@ class TestUpdateLastValidated:
         meta_before = store.get_metadata()
         assert meta_before is not None
 
+        assert meta_before.last_validated_at is None
+
         store.update_last_validated()
         meta_after = store.get_metadata()
         assert meta_after is not None
-        assert meta_after.last_validated_at >= meta_before.last_validated_at
+        assert isinstance(meta_after.last_validated_at, datetime)
 
     def test_noop_when_no_metadata(self, store):
         """update_last_validated with no metadata file is a no-op."""
         store.update_last_validated()  # Should not raise
         assert store.get_metadata() is None
+
+    def test_noop_when_metadata_corrupted(self, store, data_dir):
+        """update_last_validated is a no-op when metadata is corrupted."""
+        store.store("github_pat_test1234")
+        meta_path = os.path.join(data_dir, "credential_meta.json")
+        with open(meta_path, "w") as f:
+            f.write("not valid json")
+        store.update_last_validated()  # Should not raise
 
 
 class TestLoadIOErrorPropagation:

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_macros.html" import source_label %}
 {% block title %}Settings — Token Management{% endblock %}
 {% block content %}
 <h1>Settings</h1>
@@ -15,16 +16,7 @@
     <p class="token-display">No token configured</p>
     {% endif %}
     <p class="meta">
-        Source:
-        {% if source == "docker_secret" %}
-            Docker Secret
-        {% elif source == "env_var" %}
-            Environment Variable
-        {% elif source == "stored" %}
-            Encrypted Store
-        {% else %}
-            {{ source }}
-        {% endif %}
+        Source: {{ source_label(source) }}
     </p>
 </div>
 

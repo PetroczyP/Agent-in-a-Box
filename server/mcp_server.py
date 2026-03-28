@@ -15,12 +15,15 @@ from mcp.server.fastmcp import FastMCP
 
 from server.copilot_client import (
     CopilotAuthError,
+    CopilotError,
     CopilotRateLimitError,
     CopilotReviewClient,
     CopilotTimeoutError,
     CopilotUnavailableError,
     NoCredentialError,
 )
+from server.credential_resolver import CredentialResolver
+from server.credential_store import CredentialStore
 from server.denylist import ContentDenylist
 from server.models import (
     DiscussRequest,
@@ -87,9 +90,6 @@ async def _initialize_copilot():
     If no credential is available, stores a NoCredentialError so tools return a
     clear error. If the SDK is unavailable, the server still starts.
     """
-    from server.credential_store import CredentialStore
-    from server.credential_resolver import CredentialResolver
-
     resolver = CredentialResolver(store=CredentialStore())
     try:
         resolved = resolver.resolve()
@@ -110,7 +110,6 @@ async def _initialize_copilot():
     try:
         await _copilot.start(github_token=token)
     except Exception as e:
-        from server.copilot_client import CopilotError
         if isinstance(e, CopilotError):
             _copilot.set_startup_error(e)
         else:

@@ -88,10 +88,13 @@ class CredentialResolver:
 
     def get_source(self) -> CredentialSource:
         """Return the source type without exposing the token."""
-        result = self.resolve()
-        if result is None:
-            return CredentialSource.NONE
-        return result.source
+        if self._read_docker_secret():
+            return CredentialSource.DOCKER_SECRET
+        if os.environ.get("GITHUB_TOKEN", "").strip():
+            return CredentialSource.ENV_VAR
+        if self._store.has_stored_credential():
+            return CredentialSource.STORED
+        return CredentialSource.NONE
 
     def _read_docker_secret(self) -> str | None:
         """Read Docker secret file, strip whitespace. Returns None if missing/empty."""
