@@ -156,6 +156,15 @@ class TokenValidator:
         if not token or not token.strip():
             raise TokenValidationError(_MSG_FORMAT_EMPTY, error_type="format")
 
+        # Reject tokens with internal whitespace or control characters
+        # (could cause header injection in Authorization header)
+        if token != token.strip() or any(c.isspace() or ord(c) < 32 for c in token):
+            raise TokenValidationError(
+                "Token contains whitespace or control characters. "
+                "Remove any line breaks or spaces within the token.",
+                error_type="format",
+            )
+
         if token.startswith("ghp_"):
             raise TokenValidationError(_MSG_FORMAT_CLASSIC, error_type="format")
 
