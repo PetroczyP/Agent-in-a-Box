@@ -17,7 +17,7 @@ Per contract: specs/002-credential-setup/contracts/web-routes.md
 from __future__ import annotations
 
 import logging
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from fastapi.testclient import TestClient
@@ -28,8 +28,7 @@ from server.token_validator import TokenValidationError
 
 def _create_test_app(resolver_result=None, resolver_source=CredentialSource.NONE):
     """Create a FastAPI test app with mocked dependencies."""
-    from server.web_routes import create_router, mask_token
-    from server.main import app as real_app
+    from server.web_routes import create_router
     from fastapi import FastAPI
     from fastapi.staticfiles import StaticFiles
     from fastapi.templating import Jinja2Templates

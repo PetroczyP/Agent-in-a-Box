@@ -133,8 +133,9 @@ class CredentialStore:
                 fh.flush()
                 os.fsync(fh.fileno())
             os.replace(tmp_meta, self._meta_path)
-        except OSError:
+        except OSError as e:
             # Metadata freshness is non-critical; log and continue
+            logger.warning("Failed to update last_validated_at metadata: %s", type(e).__name__)
             try:
                 os.unlink(tmp_meta)
             except FileNotFoundError:
