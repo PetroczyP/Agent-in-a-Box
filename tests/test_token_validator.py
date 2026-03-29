@@ -288,4 +288,4 @@ class TestValidateCopilotAccessUnexpectedError:
         with pytest.raises(TokenValidationError) as exc_info:
             await validator.validate_copilot_access("github_pat_test", github_auth_confirmed=None)
         assert exc_info.value.error_type == "sdk"
-        assert "Check container logs" in exc_info.value.message
+        assert "Try again or contact your administrator" in exc_info.value.message

@@ -230,12 +230,16 @@ class TokenValidator:
                     _MSG_AUTH_LOW_CONFIDENCE, error_type="auth"
                 ) from None
         except Exception as e:
-            logger.error("Unexpected error during Copilot validation: %s", e, exc_info=True)
+            # Log only the exception type to avoid leaking potentially sensitive details
+            logger.error(
+                "Unexpected error during Copilot validation (type=%s)",
+                type(e).__name__,
+            )
             raise TokenValidationError(
                 "An unexpected error occurred while validating Copilot access. "
-                "Check container logs for details and try again.",
+                "Try again or contact your administrator.",
                 error_type="sdk",
-            ) from e
+            ) from None
         finally:
             try:
                 await client.stop()
