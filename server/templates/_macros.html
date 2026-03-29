@@ -1,0 +1,8 @@
+{% macro source_label(source) %}
+{%- if source == "docker_secret" %}Docker Secret
+{%- elif source == "env_var" %}Environment Variable
+{%- elif source == "stored" %}Stored (encrypted)
+{%- elif source == "none" %}Not configured
+{%- else %}{{ source }}
+{%- endif %}
+{% endmacro %}

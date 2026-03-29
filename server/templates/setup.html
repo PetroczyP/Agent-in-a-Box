@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Setup — Configure GitHub Token{% endblock %}
+{% block content %}
+<h1>Setup — Configure GitHub Token</h1>
+
+{% if error %}
+<div class="error">{{ error }}</div>
+{% endif %}
+
+<div class="card">
+    <h2>Create a Fine-Grained Personal Access Token</h2>
+    <ol>
+        <li>Go to <a href="https://github.com/settings/tokens?type=beta" target="_blank" rel="noopener">github.com/settings/tokens?type=beta</a></li>
+        <li>Click <strong>"Generate new token"</strong></li>
+        <li>Under <strong>Account permissions</strong>, enable <strong>copilot_requests</strong></li>
+        <li>Copy the token (starts with <code>github_pat_</code>)</li>
+    </ol>
+</div>
+
+<div class="card">
+    <form method="post" action="/setup">
+        <label for="token">GitHub Personal Access Token</label>
+        <input type="password" id="token" name="token" placeholder="github_pat_..." required>
+        <p class="note">Your token will be encrypted and stored securely inside the container.</p>
+        <button type="submit">Save &amp; Test Connection</button>
+    </form>
+</div>
+{% endblock %}

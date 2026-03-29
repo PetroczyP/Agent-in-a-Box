@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% from "_macros.html" import source_label %}
+{% block title %}Settings — Token Management{% endblock %}
+{% block content %}
+<h1>Settings</h1>
+
+{% if error %}
+<div class="error">{{ error }}</div>
+{% endif %}
+
+<div class="card">
+    <h2>Current Token</h2>
+    {% if masked_token %}
+    <p class="token-display">{{ masked_token }}</p>
+    {% else %}
+    <p class="token-display">No token configured</p>
+    {% endif %}
+    <p class="meta">
+        Source: {{ source_label(source) }}
+    </p>
+</div>
+
+{% if can_rotate %}
+<div class="card">
+    <h2>Change Token</h2>
+    <form method="post" action="/settings/rotate">
+        <label for="token">New GitHub Personal Access Token</label>
+        <input type="password" id="token" name="token" placeholder="github_pat_..." required>
+        <p class="note">Your new token will be validated, then encrypted and stored, replacing the old one.</p>
+        <button type="submit">Save &amp; Test Connection</button>
+    </form>
+</div>
+{% elif source == "none" %}
+<div class="card">
+    <h2>Token Management</h2>
+    <p>No token is configured. <a href="/setup">Set up a token</a> to get started.</p>
+</div>
+{% else %}
+<div class="card">
+    <h2>Token Management</h2>
+    <p>This token is managed externally via
+        {% if source == "docker_secret" %}
+            a <strong>Docker secret</strong>.
+        {% elif source == "env_var" %}
+            the <strong>GITHUB_TOKEN</strong> environment variable.
+        {% else %}
+            an external source.
+        {% endif %}
+        To change it, update the external source and restart the container.
+    </p>
+</div>
+{% endif %}
+{% endblock %}

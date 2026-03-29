@@ -9,7 +9,9 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # Install Copilot CLI globally
-RUN npm install -g @github/copilot
+RUN npm install -g @github/copilot && npm cache clean --force
+
+RUN mkdir -p /data && chmod 700 /data
 
 WORKDIR /app
 
@@ -21,6 +23,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY server/ server/
 COPY tests/ tests/
 COPY pyproject.toml .
+
+RUN useradd --create-home --shell /bin/bash --uid 1000 appuser && \
+    chown -R appuser:appuser /data /app
+USER appuser
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
