@@ -1,0 +1,6 @@
+{
+  "case_id": "case-008",
+  "description": "Insecure deserialization using pickle on untrusted data",
+  "source": "hand_curated",
+  "tags": ["security", "python"]
+}

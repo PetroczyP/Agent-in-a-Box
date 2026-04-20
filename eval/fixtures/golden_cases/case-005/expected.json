@@ -1,0 +1,14 @@
+{
+  "expected_findings": [
+    {
+      "expected_id": "EF-005",
+      "rule_id": "path-traversal",
+      "severity": "BUG",
+      "category": "security",
+      "file": "download.py",
+      "approximate_line": 10,
+      "description": "User-supplied filename is joined to base path without sanitization, allowing directory traversal via ../ sequences."
+    }
+  ],
+  "expected_non_findings": []
+}

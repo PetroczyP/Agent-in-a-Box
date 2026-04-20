@@ -1,0 +1,14 @@
+{
+  "expected_findings": [
+    {
+      "expected_id": "EF-024",
+      "rule_id": "sql-injection",
+      "severity": "BUG",
+      "category": "security",
+      "file": "query.py",
+      "approximate_line": 8,
+      "description": "String concatenation in SQL query allows injection"
+    }
+  ],
+  "expected_non_findings": []
+}

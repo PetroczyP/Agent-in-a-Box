@@ -1,0 +1,9 @@
+[
+  {
+    "turn_number": 1,
+    "rebuttal_message_template": "The thread-safety concern in {finding_id} does not apply here. This decorator is used exclusively in a single-threaded asyncio application where all cache access happens on the main event loop. Adding threading locks would add unnecessary overhead and complexity for a concurrency model we don't use. Please dismiss this finding.",
+    "target_expected_id": "EF-023",
+    "expected_status_after": "dismissed",
+    "is_valid_rebuttal": true
+  }
+]

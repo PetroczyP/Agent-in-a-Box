@@ -1,0 +1,6 @@
+{
+  "case_id": "case-004",
+  "description": "Cross-site scripting in template rendering with unescaped user input",
+  "source": "hand_curated",
+  "tags": ["security", "python"]
+}

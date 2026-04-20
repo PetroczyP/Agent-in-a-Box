@@ -1,0 +1,14 @@
+{
+  "expected_findings": [
+    {
+      "expected_id": "EF-009",
+      "rule_id": "missing-validation",
+      "severity": "WARN",
+      "category": "correctness",
+      "file": "orders.py",
+      "approximate_line": 8,
+      "description": "No validation on quantity or unit_price fields allows negative values, which could produce incorrect order totals."
+    }
+  ],
+  "expected_non_findings": []
+}

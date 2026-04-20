@@ -1,0 +1,6 @@
+{
+  "case_id": "case-010",
+  "description": "TOCTOU race condition: file existence check followed by open",
+  "source": "hand_curated",
+  "tags": ["correctness", "python"]
+}

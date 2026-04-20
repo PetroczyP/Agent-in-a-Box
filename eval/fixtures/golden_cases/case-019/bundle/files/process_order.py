@@ -1,0 +1,37 @@
+import sqlite3
+import smtplib
+import logging
+from email.mime.text import MIMEText
+
+def process_order(order_data: dict) -> dict:
+    """Validate, store, notify, and log an order — all in one place."""
+    # Validate input
+    if not order_data.get("customer_email"):
+        raise ValueError("Missing customer email")
+    if not order_data.get("items"):
+        raise ValueError("Order must have at least one item")
+    total = sum(item["price"] * item["qty"] for item in order_data["items"])
+    if total <= 0:
+        raise ValueError("Order total must be positive")
+
+    # Store in database
+    conn = sqlite3.connect("orders.db")
+    cursor = conn.execute(
+        "INSERT INTO orders (email, total) VALUES (?, ?)",
+        (order_data["customer_email"], total),
+    )
+    order_id = cursor.lastrowid
+    conn.commit()
+    conn.close()
+
+    # Send confirmation email
+    msg = MIMEText(f"Your order #{order_id} for ${total:.2f} is confirmed.")
+    msg["Subject"] = "Order Confirmation"
+    msg["To"] = order_data["customer_email"]
+    with smtplib.SMTP("localhost", 587) as server:
+        server.send_message(msg)
+
+    # Log the event
+    logging.info("Order %s created for %s, total=$%.2f", order_id, order_data["customer_email"], total)
+
+    return {"order_id": order_id, "total": total, "status": "confirmed"}

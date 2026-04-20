@@ -1,0 +1,14 @@
+{
+  "expected_findings": [
+    {
+      "expected_id": "EF-004",
+      "rule_id": "xss",
+      "severity": "BUG",
+      "category": "security",
+      "file": "views.py",
+      "approximate_line": 12,
+      "description": "User input is interpolated directly into HTML response without escaping, enabling cross-site scripting attacks."
+    }
+  ],
+  "expected_non_findings": []
+}

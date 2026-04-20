@@ -1,0 +1,14 @@
+{
+  "expected_findings": [
+    {
+      "expected_id": "EF-010",
+      "rule_id": "toctou-race",
+      "severity": "WARN",
+      "category": "correctness",
+      "file": "file_handler.py",
+      "approximate_line": 10,
+      "description": "Time-of-check to time-of-use race condition: os.path.exists check followed by open allows file to be deleted or changed between the two operations."
+    }
+  ],
+  "expected_non_findings": []
+}

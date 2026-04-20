@@ -1,0 +1,6 @@
+{
+  "case_id": "case-006",
+  "description": "Hardcoded API key in source code",
+  "source": "hand_curated",
+  "tags": ["security", "python"]
+}

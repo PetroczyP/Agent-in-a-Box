@@ -1,0 +1,27 @@
+## Task
+You are evaluating whether a code review finding matches any expected finding,
+or whether it represents a novel valid issue or noise.
+
+## Expected Findings
+{expected_findings}
+
+## Actual Finding to Grade
+{actual_finding}
+
+## Case Context
+{case_description}
+
+## Rubric
+{rubric}
+
+## Few-Shot Examples
+{few_shot_examples}
+
+## Output Format
+Respond with ONLY a JSON object:
+{{
+  "verdict": "match" | "partial_match" | "novel_valid" | "no_match",
+  "confidence": "high" | "medium" | "low",
+  "matched_expected_id": "EF-001" | null,
+  "reasoning": "Brief explanation"
+}}

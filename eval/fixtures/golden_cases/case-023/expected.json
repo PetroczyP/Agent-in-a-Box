@@ -1,0 +1,14 @@
+{
+  "expected_findings": [
+    {
+      "expected_id": "EF-023",
+      "rule_id": "race-condition",
+      "severity": "WARN",
+      "category": "correctness",
+      "file": "cache_decorator.py",
+      "approximate_line": 20,
+      "description": "The cache dictionary is shared mutable state with no thread synchronization. Concurrent access from multiple threads can cause data corruption or KeyError."
+    }
+  ],
+  "expected_non_findings": []
+}

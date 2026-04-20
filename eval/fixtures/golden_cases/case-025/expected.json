@@ -1,0 +1,14 @@
+{
+  "expected_findings": [
+    {
+      "expected_id": "EF-025",
+      "rule_id": "xss",
+      "severity": "BUG",
+      "category": "security",
+      "file": "render.py",
+      "approximate_line": 10,
+      "description": "User-supplied name is interpolated into HTML without escaping, allowing cross-site scripting."
+    }
+  ],
+  "expected_non_findings": []
+}

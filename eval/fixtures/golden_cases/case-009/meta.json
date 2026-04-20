@@ -1,0 +1,6 @@
+{
+  "case_id": "case-009",
+  "description": "Missing bounds check on quantity field allows negative values in order total",
+  "source": "hand_curated",
+  "tags": ["correctness", "python"]
+}

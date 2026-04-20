@@ -1,0 +1,14 @@
+{
+  "expected_findings": [
+    {
+      "expected_id": "EF-008",
+      "rule_id": "insecure-deserialization",
+      "severity": "BUG",
+      "category": "security",
+      "file": "cache.py",
+      "approximate_line": 14,
+      "description": "pickle.loads is used to deserialize data from disk cache, which can execute arbitrary code if cache files are tampered with."
+    }
+  ],
+  "expected_non_findings": []
+}

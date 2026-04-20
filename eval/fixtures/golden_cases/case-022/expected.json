@@ -1,0 +1,14 @@
+{
+  "expected_findings": [
+    {
+      "expected_id": "EF-022",
+      "rule_id": "bare-except",
+      "severity": "WARN",
+      "category": "correctness",
+      "file": "sync_service.py",
+      "approximate_line": 10,
+      "description": "Bare except swallows all errors including system exits"
+    }
+  ],
+  "expected_non_findings": []
+}

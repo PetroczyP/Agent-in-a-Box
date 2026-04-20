@@ -1,0 +1,6 @@
+{
+  "case_id": "case-017",
+  "description": "Configuration loader with environment variable fallbacks and validation",
+  "source": "hand_curated",
+  "tags": ["clean", "python"]
+}

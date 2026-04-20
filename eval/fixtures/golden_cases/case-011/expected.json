@@ -1,0 +1,14 @@
+{
+  "expected_findings": [
+    {
+      "expected_id": "EF-011",
+      "rule_id": "missing-auth",
+      "severity": "BUG",
+      "category": "security",
+      "file": "admin.py",
+      "approximate_line": 6,
+      "description": "Admin endpoints for deleting and listing users have no authentication or authorization checks, allowing unauthenticated access to privileged operations."
+    }
+  ],
+  "expected_non_findings": []
+}

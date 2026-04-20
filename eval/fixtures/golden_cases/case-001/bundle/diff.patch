@@ -1,0 +1,33 @@
+diff --git a/app.py b/app.py
+new file mode 100644
+index 0000000..a3c7e8f
+--- /dev/null
++++ b/app.py
+@@ -0,0 +1,28 @@
++import sqlite3
++from flask import Flask, request, jsonify
++
++app = Flask(__name__)
++DB_PATH = "users.db"
++
++
++def get_db():
++    conn = sqlite3.connect(DB_PATH)
++    conn.row_factory = sqlite3.Row
++    return conn
++
++
++@app.route("/users")
++def get_user():
++    username = request.args.get("username", "")
++    db = get_db()
++    query = "SELECT * FROM users WHERE username = '" + username + "'"
++    cursor = db.execute(query)
++    rows = [dict(row) for row in cursor.fetchall()]
++    db.close()
++    return jsonify(rows)
++
++
++@app.route("/health")
++def health():
++    return jsonify({"status": "ok"})

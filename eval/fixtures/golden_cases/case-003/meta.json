@@ -1,0 +1,6 @@
+{
+  "case_id": "case-003",
+  "description": "Dynamic module loader with csv module that lacks loads() method. Reviewer should flag the AttributeError bug. Multi-turn case: developer explains csv is used via a different code path, reviewer should dismiss.",
+  "source": "hand_curated",
+  "tags": ["multi-turn", "python", "correctness"]
+}

@@ -1,0 +1,14 @@
+{
+  "expected_findings": [
+    {
+      "expected_id": "EF-006",
+      "rule_id": "hardcoded-secret",
+      "severity": "BUG",
+      "category": "security",
+      "file": "config.py",
+      "approximate_line": 5,
+      "description": "API key is hardcoded as a string literal in source code instead of being loaded from environment variables or a secrets manager."
+    }
+  ],
+  "expected_non_findings": []
+}

@@ -1,0 +1,6 @@
+{
+  "case_id": "case-023",
+  "description": "Custom TTL cache decorator. Reviewer should flag thread-safety concern on shared mutable cache dict. Multi-turn case: developer explains single-threaded asyncio context, reviewer should dismiss.",
+  "source": "hand_curated",
+  "tags": ["multi-turn", "concurrency", "python"]
+}

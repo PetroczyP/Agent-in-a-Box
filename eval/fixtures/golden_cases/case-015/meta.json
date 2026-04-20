@@ -1,0 +1,6 @@
+{
+  "case_id": "case-015",
+  "description": "User domain models with Pydantic validation, reserved username check, and whitespace-only display name guard. No silent normalization.",
+  "source": "hand_curated",
+  "tags": ["clean", "python"]
+}

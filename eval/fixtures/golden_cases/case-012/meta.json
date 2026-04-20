@@ -1,0 +1,6 @@
+{
+  "case_id": "case-012",
+  "description": "File handle leaked in loop - opened but never closed on error path",
+  "source": "hand_curated",
+  "tags": ["correctness", "python"]
+}

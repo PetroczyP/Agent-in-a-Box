@@ -1,0 +1,4 @@
+{
+  "expected_findings": [],
+  "expected_non_findings": ["hardcoded-secret"]
+}

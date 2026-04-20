@@ -1,0 +1,6 @@
+{
+  "case_id": "case-022",
+  "description": "Bare except clause silently swallows all exceptions including KeyboardInterrupt",
+  "source": "hand_curated",
+  "tags": ["error-handling", "python"]
+}

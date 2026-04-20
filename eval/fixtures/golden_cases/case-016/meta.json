@@ -1,0 +1,6 @@
+{
+  "case_id": "case-016",
+  "description": "Async HTTP client with tenacity retry on transport errors, proper async context manager, and structured timeout configuration.",
+  "source": "hand_curated",
+  "tags": ["clean", "python"]
+}

@@ -1,0 +1,14 @@
+{
+  "expected_findings": [
+    {
+      "expected_id": "EF-007",
+      "rule_id": "command-injection",
+      "severity": "BUG",
+      "category": "security",
+      "file": "deploy.py",
+      "approximate_line": 8,
+      "description": "User-provided hostname is interpolated into shell command passed to os.system, allowing arbitrary command injection."
+    }
+  ],
+  "expected_non_findings": []
+}

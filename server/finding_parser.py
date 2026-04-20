@@ -24,10 +24,19 @@ from server.models import (
 )
 
 
-def compute_fingerprint(rule_id: str, code_snippet: str) -> str:
-    """SHA-256 of rule_id + normalized code, truncated to 16 hex chars."""
+def compute_fingerprint(rule_id: str, file_path: str, code_snippet: str) -> str:
+    """SHA-256 of (rule_id, file_path, normalized code), truncated to 16 hex chars.
+
+    The file path is part of the identity because the same rule_id and
+    snippet can legitimately appear in multiple files (e.g., a shared
+    anti-pattern) and must not be merged by reconciliation. Line
+    numbers are deliberately excluded — a fix that shifts lines should
+    still match its prior fingerprint.
+    """
     normalized = " ".join(code_snippet.split())
-    return hashlib.sha256(f"{rule_id}:{normalized}".encode()).hexdigest()[:16]
+    return hashlib.sha256(
+        f"{rule_id}:{file_path}:{normalized}".encode()
+    ).hexdigest()[:16]
 
 
 class FindingParser:
@@ -38,25 +47,46 @@ class FindingParser:
         response_text: str,
         file_contents: dict[str, str],
         start_id: int = 1,
+        filter_low_confidence: bool = True,
+        allow_nit_fallback: bool = True,
     ) -> list[Finding]:
-        """Parse response into findings. start_id controls F-NNN numbering."""
+        """Parse response into findings. start_id controls F-NNN numbering.
+
+        When filter_low_confidence is False, low-confidence findings are
+        preserved so the caller can make its own decision (e.g., discuss
+        reconciliation needs them to propagate status updates).
+
+        When allow_nit_fallback is False, unparseable responses return []
+        instead of the synthetic NIT wrap. Used by discuss() where plain
+        conversational text must not fabricate phantom findings.
+        """
+        def _maybe_filter(fs: list[Finding]) -> list[Finding]:
+            return self._filter_low_confidence(fs) if filter_low_confidence else fs
+
         # Try JSON first (returns None on parse failure, [] on valid empty array)
         findings = self._try_json(response_text, file_contents, start_id)
         if findings is not None:
-            return findings
+            return _maybe_filter(findings)
 
         # Try json-repair for truncated / malformed JSON
         findings = self._try_json_repair(response_text, file_contents, start_id)
         if findings is not None:
-            return findings
+            return _maybe_filter(findings)
 
         # Try regex fallback
         findings = self._try_regex(response_text, file_contents, start_id)
         if findings is not None:
-            return findings
+            return _maybe_filter(findings)
 
-        # Last resort: wrap entire response as single NIT
+        if not allow_nit_fallback:
+            return []
+
+        # NIT wrap: don't filter — unparseable responses need human review
         return self._wrap_as_nit(response_text, start_id)
+
+    def _filter_low_confidence(self, findings: list[Finding]) -> list[Finding]:
+        """Remove findings with low confidence per confidence threshold rule."""
+        return [f for f in findings if f.confidence != Confidence.LOW]
 
     # ── Trust model (output-contract approach) ───────────────────────
     #
@@ -140,8 +170,10 @@ class FindingParser:
         1. Code-fenced blocks (```json ... ```)
         2. Sentinel-delimited blocks (BEGIN/END_FINDINGS_JSON)
         Both are checked independently — code fences do not suppress
-        sentinel extraction.  Falls back to whole stripped text only
-        when neither container is found.
+        sentinel extraction.  Identical content emitted in both containers
+        (belt-and-suspenders prompt compliance) is deduplicated so each
+        underlying finding gets a single F-NNN id.  Falls back to whole
+        stripped text only when neither container is found.
 
         Bare JSON embedded in prose (e.g., "Example: [{...}]") is NOT
         extracted.  This is the ambiguous zone where illustrative and
@@ -169,6 +201,7 @@ class FindingParser:
         if sentinel:
             results.extend(s.strip() for s in sentinel)
 
+        results = self._dedupe_by_content(results)
         if results:
             return results
 
@@ -178,6 +211,27 @@ class FindingParser:
             return [stripped]
 
         return []
+
+    @staticmethod
+    def _dedupe_by_content(candidates: list[str]) -> list[str]:
+        """Deduplicate JSON candidate strings by whitespace-normalized content.
+
+        Models occasionally emit the same findings in multiple trusted
+        containers (e.g., both a code fence and sentinel block).  Without
+        dedup the same finding would be assigned two F-NNN ids and inflate
+        downstream metrics.  Normalization collapses whitespace so
+        semantically identical JSON with differing indentation still
+        dedupes.  Order is preserved (first occurrence wins).
+        """
+        seen: set[str] = set()
+        unique: list[str] = []
+        for candidate in candidates:
+            key = "".join(candidate.split())
+            if key in seen:
+                continue
+            seen.add(key)
+            unique.append(candidate)
+        return unique
 
     def _parse_json_to_items(self, json_str: str) -> list[dict] | None:
         """Parse a JSON string into a list of finding dicts.
@@ -267,10 +321,11 @@ class FindingParser:
 
         Collects candidates from code fences and sentinel blocks
         independently — code fences do not suppress sentinel
-        extraction.  Stricter on the whole-text fallback: only tries
-        whole text if it starts with JSON syntax ([ or {).  Prose
-        starting with words is NOT repaired — that would extract bare
-        JSON from the ambiguous zone.
+        extraction.  Identical content from both containers is
+        deduplicated (see ``_dedupe_by_content``).  Stricter on the
+        whole-text fallback: only tries whole text if it starts with
+        JSON syntax ([ or {).  Prose starting with words is NOT
+        repaired — that would extract bare JSON from the ambiguous zone.
         """
         results: list[str] = []
 
@@ -292,6 +347,7 @@ class FindingParser:
         if sentinel:
             results.extend(s.strip() for s in sentinel)
 
+        results = self._dedupe_by_content(results)
         if results:
             return results
 
@@ -430,7 +486,7 @@ class FindingParser:
         )
         if not evidence and code_at_location:
             evidence = code_at_location
-        fingerprint = compute_fingerprint(rule_id, code_at_location)
+        fingerprint = compute_fingerprint(rule_id, file_path, code_at_location)
 
         severity_str = str(d.get("severity", "NIT")).upper()
         severity = self._SEVERITY_MAP.get(severity_str, Severity.NIT)
@@ -439,6 +495,10 @@ class FindingParser:
         category = self._CATEGORY_MAP.get(category_str)
         if category is None:
             category = self._infer_category(message)
+
+        # Category-severity consistency: style findings cannot be runtime bugs.
+        if category == Category.STYLE and severity == Severity.BUG:
+            severity = Severity.NIT
 
         confidence_str = str(d.get("confidence", "medium")).lower()
         try:
@@ -498,7 +558,7 @@ class FindingParser:
             code_at_location = self._get_code_at_location(
                 file_contents, file_path, start_line, end_line
             )
-            fingerprint = compute_fingerprint(rule_id, code_at_location)
+            fingerprint = compute_fingerprint(rule_id, file_path, code_at_location)
 
             findings.append(
                 Finding(
@@ -524,7 +584,7 @@ class FindingParser:
 
     def _wrap_as_nit(self, text: str, start_id: int) -> list[Finding]:
         """Wrap unparseable response as a single NIT finding."""
-        fingerprint = compute_fingerprint("unparseable-response", text)
+        fingerprint = compute_fingerprint("unparseable-response", "unknown", text)
         return [
             Finding(
                 finding_id=f"F-{start_id:03d}",

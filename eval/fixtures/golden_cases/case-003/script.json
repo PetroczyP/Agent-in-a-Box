@@ -1,0 +1,9 @@
+[
+  {
+    "turn_number": 1,
+    "rebuttal_message_template": "Regarding {finding_id}: the csv module is loaded via ALLOWED_MODULES for its DictReader and writer APIs, which are accessed through a separate code path not shown in this diff. The parse_data() function is only called with 'json' and 'tomllib' formats in production — csv data uses a dedicated csv_import() function. The loads() path is dead code that should be removed, but is not a runtime bug because it is never reached. Please dismiss this finding.",
+    "target_expected_id": "EF-003",
+    "expected_status_after": "dismissed",
+    "is_valid_rebuttal": true
+  }
+]

@@ -1,0 +1,6 @@
+{
+  "case_id": "case-014",
+  "description": "Users REST API with API key auth, parameterized SQL queries, and offset pagination. Production-quality FastAPI endpoint.",
+  "source": "hand_curated",
+  "tags": ["clean", "python"]
+}

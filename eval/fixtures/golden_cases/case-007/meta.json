@@ -1,0 +1,6 @@
+{
+  "case_id": "case-007",
+  "description": "Command injection via os.system with unsanitized user input",
+  "source": "hand_curated",
+  "tags": ["security", "python"]
+}

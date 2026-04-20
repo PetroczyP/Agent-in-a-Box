@@ -1,0 +1,14 @@
+{
+  "expected_findings": [
+    {
+      "expected_id": "EF-021",
+      "rule_id": "misleading-docstring",
+      "severity": "NIT",
+      "category": "style",
+      "file": "sorter.py",
+      "approximate_line": 2,
+      "description": "Docstring says ascending sort but implementation sorts descending"
+    }
+  ],
+  "expected_non_findings": []
+}

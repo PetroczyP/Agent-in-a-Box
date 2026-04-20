@@ -1,0 +1,14 @@
+{
+  "expected_findings": [
+    {
+      "expected_id": "EF-013",
+      "rule_id": "n-plus-one-query",
+      "severity": "WARN",
+      "category": "maintainability",
+      "file": "reports.py",
+      "approximate_line": 12,
+      "description": "Individual SQL query executed inside a loop for each department ID, causing N+1 query performance degradation."
+    }
+  ],
+  "expected_non_findings": []
+}

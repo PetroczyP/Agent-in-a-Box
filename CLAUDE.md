@@ -68,18 +68,19 @@ Specs live in `specs/NNN-feature-name/spec.md`:
 | Spec | Feature | Status |
 |------|---------|--------|
 | 001 | Core Review Server (MCP + Copilot SDK + Docker) | Implemented |
-| 002 | Credential Setup (PAT encryption, onboarding) | Draft |
+| 002 | Credential Setup (PAT encryption, onboarding) | Implemented |
 | 003 | Review Dashboard (web UI) | Draft |
 | 004 | Human Oversight (approval workflow) | Draft |
 | 005 | Model Configuration | Draft |
 | 006 | Fallback Backends (OpenAI, Anthropic, Gemini, Ollama) | Draft |
 | 007 | Eval Harness | Draft |
-| 008 | Prompt Tuning for Structured Output | In Progress — branch `008-prompt-tuning` |
+| 008 | Prompt Tuning for Structured Output | Implemented |
 | 009 | Slack Integration | Backlog |
 | 010 | Agent SDK Backends (Claude Agent SDK, Codex CLI) | Backlog |
 | 011 | REST API Transport (CI/CD integration) | Backlog |
 | 012 | Multi-Dimension Review Engine (parallel personas + synthesis) | Draft |
 | 013 | Cross-Session Review Memory (regression detection, dismissal memory) | Backlog |
+| 014 | Eval Harness Statistical Hardening | Backlog |
 
 ## Development Workflow
 
@@ -151,6 +152,8 @@ When implementing MCP server code (tasks T020-T022 in spec 001), use the `mcp-bu
 - In-memory session storage (ephemeral, per MCP process lifetime) (001-ai-code-reviewer)
 - Python 3.11+ + `json-repair` (new, for FR-007), existing: `mcp>=1.0.0`, `github-copilot-sdk>=0.1.0`, `pydantic>=2.12` (008-prompt-tuning)
 - N/A (no new storage — modifies in-memory prompt strings and parser logic) (008-prompt-tuning)
+- Python 3.11+ + `mcp>=1.0.0` (MCP client SDK), `anthropic>=0.86.0` (Tier 2 grader), `pydantic>=2.12` (models) (007-eval-harness)
+- File-based (golden cases in `eval/fixtures/`, results in `eval/results/`). No database. (007-eval-harness)
 
 ## Recent Changes
 - 008-prompt-tuning: Added Python 3.11+ + `json-repair` (new, for FR-007), existing: `mcp>=1.0.0`, `github-copilot-sdk>=0.1.0`, `pydantic>=2.12`

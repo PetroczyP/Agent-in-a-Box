@@ -46,10 +46,70 @@ class TestJsonParsing:
 
     def test_fingerprint_stability(self, parser, file_contents):
         """Same rule_id + code should produce same fingerprint."""
-        response = '[{"rule_id": "test-rule", "severity": "NIT", "category": "style", "message": "Test", "file": "foo.py", "start_line": 1, "end_line": 1, "confidence": "low", "evidence": "import os"}]'
+        response = '[{"rule_id": "test-rule", "severity": "NIT", "category": "style", "message": "Test", "file": "foo.py", "start_line": 1, "end_line": 1, "confidence": "medium", "evidence": "import os"}]'
         f1 = parser.parse(response, file_contents)
         f2 = parser.parse(response, file_contents)
         assert f1[0].fingerprint == f2[0].fingerprint
+
+
+class TestConfidenceFiltering:
+    def test_low_confidence_findings_are_filtered(self, parser, file_contents):
+        """Low-confidence findings must be removed by the parser."""
+        response = '[{"rule_id": "real-bug", "severity": "BUG", "category": "correctness", "message": "Real bug", "file": "foo.py", "start_line": 1, "end_line": 1, "confidence": "high", "evidence": "import os"}, {"rule_id": "maybe-issue", "severity": "NIT", "category": "style", "message": "Maybe", "file": "foo.py", "start_line": 1, "end_line": 1, "confidence": "low", "evidence": "import os"}]'
+        findings = parser.parse(response, file_contents)
+        assert len(findings) == 1
+        assert findings[0].rule_id == "real-bug"
+
+    def test_nit_wrap_preserves_low_confidence(self, parser, file_contents):
+        """Unparseable responses wrapped as NITs keep LOW confidence (human review)."""
+        response = "This is just free text with no structured content at all."
+        findings = parser.parse(response, file_contents)
+        assert len(findings) == 1
+        assert findings[0].confidence == Confidence.LOW
+
+    def test_filter_low_confidence_false_preserves_low(self, parser, file_contents):
+        """When the caller opts out of filtering, low-confidence findings
+        survive so they can drive reconciliation in discuss flows."""
+        response = '[{"rule_id": "real-bug", "severity": "BUG", "category": "correctness", "message": "Real bug", "file": "foo.py", "start_line": 1, "end_line": 1, "confidence": "high", "evidence": "import os"}, {"rule_id": "maybe-issue", "severity": "NIT", "category": "style", "message": "Maybe", "file": "foo.py", "start_line": 1, "end_line": 1, "confidence": "low", "evidence": "import os", "status": "dismissed"}]'
+        findings = parser.parse(
+            response, file_contents, filter_low_confidence=False
+        )
+        assert len(findings) == 2
+        rule_ids = {f.rule_id for f in findings}
+        assert rule_ids == {"real-bug", "maybe-issue"}
+
+    def test_allow_nit_fallback_false_returns_empty_on_unparseable(
+        self, parser, file_contents
+    ):
+        """When allow_nit_fallback is False, unparseable plain text returns
+        []. This is how discuss() avoids fabricating phantom findings from
+        conversational replies that omit the JSON block."""
+        response = "Thanks for clarifying. Let me think about that."
+        findings = parser.parse(
+            response, file_contents, allow_nit_fallback=False
+        )
+        assert findings == []
+
+    def test_duplicate_json_in_fence_and_sentinel_emits_once(
+        self, parser, file_contents
+    ):
+        """When the model emits the same findings in both a code fence and
+        sentinel-delimited block (belt-and-suspenders), the parser must
+        deduplicate so each underlying finding gets one F-NNN id — not two.
+        """
+        finding_json = (
+            '[{"rule_id": "unused-import", "severity": "NIT", '
+            '"category": "style", "message": "Unused import os", '
+            '"file": "foo.py", "start_line": 1, "end_line": 1, '
+            '"confidence": "high", "evidence": "import os"}]'
+        )
+        response = (
+            f"```json\n{finding_json}\n```\n\n"
+            f"BEGIN_FINDINGS_JSON\n{finding_json}\nEND_FINDINGS_JSON"
+        )
+        findings = parser.parse(response, file_contents)
+        assert len(findings) == 1
+        assert findings[0].rule_id == "unused-import"
 
 
 class TestMalformedJsonFallback:
@@ -124,8 +184,8 @@ The os module is imported but never used.
 
 class TestFingerprintComputation:
     def test_fingerprint_uses_rule_id_and_code(self, parser, file_contents):
-        response1 = '[{"rule_id": "rule-a", "severity": "NIT", "category": "style", "message": "Test", "file": "foo.py", "start_line": 1, "end_line": 1, "confidence": "low", "evidence": "import os"}]'
-        response2 = '[{"rule_id": "rule-b", "severity": "NIT", "category": "style", "message": "Test", "file": "foo.py", "start_line": 1, "end_line": 1, "confidence": "low", "evidence": "import os"}]'
+        response1 = '[{"rule_id": "rule-a", "severity": "NIT", "category": "style", "message": "Test", "file": "foo.py", "start_line": 1, "end_line": 1, "confidence": "medium", "evidence": "import os"}]'
+        response2 = '[{"rule_id": "rule-b", "severity": "NIT", "category": "style", "message": "Test", "file": "foo.py", "start_line": 1, "end_line": 1, "confidence": "medium", "evidence": "import os"}]'
         f1 = parser.parse(response1, file_contents)
         f2 = parser.parse(response2, file_contents)
         # Different rule_id → different fingerprint
@@ -135,11 +195,37 @@ class TestFingerprintComputation:
         """Whitespace differences in code should not change fingerprint."""
         files1 = {"foo.py": "import  os\ndef   main():\n    pass\n"}
         files2 = {"foo.py": "import os\ndef main():\n pass\n"}
-        response = '[{"rule_id": "test", "severity": "NIT", "category": "style", "message": "Test", "file": "foo.py", "start_line": 1, "end_line": 1, "confidence": "low", "evidence": "import os"}]'
+        response = '[{"rule_id": "test", "severity": "NIT", "category": "style", "message": "Test", "file": "foo.py", "start_line": 1, "end_line": 1, "confidence": "medium", "evidence": "import os"}]'
         f1 = parser.parse(response, files1)
         f2 = parser.parse(response, files2)
         # Both should have same fingerprint since code normalizes whitespace
         assert f1[0].fingerprint == f2[0].fingerprint
+
+    def test_fingerprint_differs_across_files_with_same_rule_and_code(self, parser):
+        """Same rule_id + identical snippet in DIFFERENT files must NOT collide.
+
+        Regression guard for F11: prior implementation hashed only
+        (rule_id, normalized_code), so a.py and b.py with identical
+        snippets produced the same fingerprint — reconciliation then
+        merged distinct issues across files.
+        """
+        files = {
+            "a.py": "result = compute(user_input)\n",
+            "b.py": "result = compute(user_input)\n",
+        }
+        response_a = (
+            '[{"rule_id": "unsafe-input", "severity": "BUG", "category": "security",'
+            ' "message": "Unsafe input", "file": "a.py", "start_line": 1, "end_line": 1,'
+            ' "confidence": "high", "evidence": "result = compute(user_input)"}]'
+        )
+        response_b = (
+            '[{"rule_id": "unsafe-input", "severity": "BUG", "category": "security",'
+            ' "message": "Unsafe input", "file": "b.py", "start_line": 1, "end_line": 1,'
+            ' "confidence": "high", "evidence": "result = compute(user_input)"}]'
+        )
+        fa = parser.parse(response_a, files)
+        fb = parser.parse(response_b, files)
+        assert fa[0].fingerprint != fb[0].fingerprint
 
 
 # ---------------------------------------------------------------------------
@@ -433,10 +519,35 @@ class TestSeverityMapping:
         ("UNKNOWN_SEVERITY", Severity.NIT),  # unmapped → default NIT
     ])
     def test_severity_mapping(self, parser, file_contents, raw, expected):
-        response = f'[{{"severity": "{raw}", "message": "X", "file": "foo.py", "start_line": 1, "end_line": 1}}]'
+        response = f'[{{"severity": "{raw}", "category": "correctness", "message": "X", "file": "foo.py", "start_line": 1, "end_line": 1}}]'
         findings = parser.parse(response, file_contents)
         assert len(findings) == 1
         assert findings[0].severity == expected
+
+
+class TestCategorySeverityConsistency:
+    """Style findings cannot be BUG — downgraded to NIT."""
+
+    def test_style_bug_downgraded_to_nit(self, parser, file_contents):
+        response = '[{"rule_id": "naming-issue", "severity": "BUG", "category": "style", "message": "Bad name", "file": "foo.py", "start_line": 1, "end_line": 1, "confidence": "high", "evidence": "x"}]'
+        findings = parser.parse(response, file_contents)
+        assert len(findings) == 1
+        assert findings[0].severity == Severity.NIT
+        assert findings[0].category == Category.STYLE
+
+    def test_style_warn_unchanged(self, parser, file_contents):
+        """WARN+style is allowed — only BUG+style is inconsistent."""
+        response = '[{"rule_id": "naming-issue", "severity": "WARN", "category": "style", "message": "Bad name", "file": "foo.py", "start_line": 1, "end_line": 1, "confidence": "high", "evidence": "x"}]'
+        findings = parser.parse(response, file_contents)
+        assert len(findings) == 1
+        assert findings[0].severity == Severity.WARN
+
+    def test_correctness_bug_unchanged(self, parser, file_contents):
+        """BUG+correctness is valid — no downgrade."""
+        response = '[{"rule_id": "null-deref", "severity": "BUG", "category": "correctness", "message": "NPE", "file": "foo.py", "start_line": 1, "end_line": 1, "confidence": "high", "evidence": "x"}]'
+        findings = parser.parse(response, file_contents)
+        assert len(findings) == 1
+        assert findings[0].severity == Severity.BUG
 
 
 class TestFileInference:
@@ -1115,7 +1226,7 @@ class TestIncidentalBracketFalsePositive:
     def test_fenced_demo_trusted(self, parser, file_contents):
         """Code-fenced JSON with demo message → still trusted."""
         findings = parser.parse(
-            'Example:\n```json\n[{"severity":"BUG","message":"demo","file":"foo.py","line":1}]\n```',
+            'Example:\n```json\n[{"severity":"BUG","category":"correctness","message":"demo","file":"foo.py","line":1}]\n```',
             file_contents,
         )
         assert len(findings) == 1
@@ -1153,7 +1264,7 @@ class TestSentinelDelimitedJSON:
         text = (
             "Here are my findings:\n"
             "BEGIN_FINDINGS_JSON\n"
-            '[{"severity":"BUG","message":"null deref","file":"foo.py","start_line":2}]\n'
+            '[{"severity":"BUG","category":"correctness","message":"null deref","file":"foo.py","start_line":2}]\n'
             "END_FINDINGS_JSON"
         )
         findings = parser.parse(text, file_contents)
@@ -1176,7 +1287,7 @@ class TestSentinelDelimitedJSON:
         """Sentinel-delimited JSON with multiple findings → all parsed."""
         text = (
             "BEGIN_FINDINGS_JSON\n"
-            '[{"severity":"BUG","message":"null deref","file":"foo.py","start_line":1},'
+            '[{"severity":"BUG","category":"correctness","message":"null deref","file":"foo.py","start_line":1},'
             '{"severity":"WARN","message":"unchecked return","file":"foo.py","start_line":3}]\n'
             "END_FINDINGS_JSON"
         )
@@ -1238,14 +1349,14 @@ class TestTrustModelDecisionTable:
 
     def test_fenced_example_framing_placeholder(self, parser, file_contents):
         """Fenced + example framing + placeholder → trusted (parsed)."""
-        text = 'For example:\n```json\n[{"severity":"BUG","message":"demo","file":"foo.py","line":1}]\n```'
+        text = 'For example:\n```json\n[{"severity":"BUG","category":"correctness","message":"demo","file":"foo.py","line":1}]\n```'
         findings = parser.parse(text, file_contents)
         assert len(findings) == 1
         assert findings[0].severity == Severity.BUG
 
     def test_fenced_example_framing_realistic(self, parser, file_contents):
         """Fenced + example framing + realistic → trusted (parsed)."""
-        text = 'For example:\n```json\n[{"severity":"BUG","message":"division by zero","file":"foo.py","line":2}]\n```'
+        text = 'For example:\n```json\n[{"severity":"BUG","category":"correctness","message":"division by zero","file":"foo.py","line":2}]\n```'
         findings = parser.parse(text, file_contents)
         assert len(findings) == 1
         assert findings[0].severity == Severity.BUG
@@ -1264,7 +1375,7 @@ class TestTrustModelDecisionTable:
         text = (
             "Example output:\n"
             "BEGIN_FINDINGS_JSON\n"
-            '[{"severity":"BUG","message":"demo","file":"foo.py","line":1}]\n'
+            '[{"severity":"BUG","category":"correctness","message":"demo","file":"foo.py","line":1}]\n'
             "END_FINDINGS_JSON"
         )
         findings = parser.parse(text, file_contents)
@@ -1276,7 +1387,7 @@ class TestTrustModelDecisionTable:
         text = (
             "Example output:\n"
             "BEGIN_FINDINGS_JSON\n"
-            '[{"severity":"BUG","message":"division by zero","file":"foo.py","line":2}]\n'
+            '[{"severity":"BUG","category":"correctness","message":"division by zero","file":"foo.py","line":2}]\n'
             "END_FINDINGS_JSON"
         )
         findings = parser.parse(text, file_contents)
@@ -1299,14 +1410,14 @@ class TestTrustModelDecisionTable:
 
     def test_whole_response_realistic(self, parser, file_contents):
         """Whole-response JSON (no prose) → trusted."""
-        text = '[{"severity":"BUG","message":"division by zero","file":"foo.py","start_line":2}]'
+        text = '[{"severity":"BUG","category":"correctness","message":"division by zero","file":"foo.py","start_line":2}]'
         findings = parser.parse(text, file_contents)
         assert len(findings) == 1
         assert findings[0].severity == Severity.BUG
 
     def test_whole_response_placeholder(self, parser, file_contents):
         """Whole-response JSON with placeholder → trusted (still parsed)."""
-        text = '[{"severity":"BUG","message":"demo","file":"foo.py","start_line":1}]'
+        text = '[{"severity":"BUG","category":"correctness","message":"demo","file":"foo.py","start_line":1}]'
         findings = parser.parse(text, file_contents)
         assert len(findings) == 1
         assert findings[0].severity == Severity.BUG
