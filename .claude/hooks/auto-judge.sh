@@ -6,13 +6,18 @@
 # If so, extracts task_id and round, then runs codex exec in the background.
 #
 # Override the Codex binary path with CODEX_CLI env var if needed.
+# Override the model with CODEX_MODEL env var (default: gpt-5.4).
 # Logs to /tmp/codex-judge-<task-id>-round-<N>.log
 
 set -euo pipefail
 
+# Ensure jq is available
 if ! command -v jq >/dev/null 2>&1; then
+  echo "WARNING: auto-judge hook skipped — jq is not installed. Install jq to enable automatic judging." >&2
   exit 0
 fi
+
+CODEX_MODEL="${CODEX_MODEL:-gpt-5.4}"
 
 INPUT=$(cat)
 
@@ -38,6 +43,7 @@ fi
 
 # Read the actual file to check state
 if [ ! -f "$FILE_PATH" ]; then
+  echo "WARNING: auto-judge hook matched status.json path but file does not exist: $FILE_PATH" >&2
   exit 0
 fi
 
@@ -50,6 +56,24 @@ if [ "$STATE" != "ready_for_judge" ] || [ -z "$TASK_ID" ]; then
   exit 0
 fi
 
+# Validate TASK_ID format (NNN-kebab-case)
+if ! echo "$TASK_ID" | grep -qE '^[0-9]{3}-[a-z0-9-]+$'; then
+  echo "WARNING: TASK_ID '$TASK_ID' does not match expected format NNN-kebab-case" >&2
+  exit 0
+fi
+
+# Validate PHASE against known protocol phases
+if ! echo "$PHASE" | grep -qE '^(specify|design|plan|build|test|release)$'; then
+  echo "WARNING: PHASE '$PHASE' is not a recognized protocol phase" >&2
+  exit 0
+fi
+
+# Validate ROUND as a positive integer
+if ! echo "$ROUND" | grep -qE '^[1-9][0-9]*$'; then
+  echo "WARNING: ROUND '$ROUND' is not a valid positive integer" >&2
+  exit 0
+fi
+
 # Prevent double-invocation for the same task+phase+round
 MARKER="/tmp/.judge-invoked-${TASK_ID}-${PHASE}-round-${ROUND}"
 if [ -f "$MARKER" ]; then
@@ -57,20 +81,45 @@ if [ -f "$MARKER" ]; then
 fi
 touch "$MARKER"
 
-# Find the Codex CLI binary (bundled with VS Code extension)
-CODEX_BIN="${CODEX_CLI:-}"
+# Find the Codex CLI binary — try multiple sources in priority order:
+#   1. CODEX_CLI env var (if set AND the binary still exists)
+#   2. `codex` on PATH (e.g. Homebrew — most stable, survives extension updates)
+#   3. VS Code extension directory (newest first, check each for executability)
+# This avoids breakage when VS Code updates extensions and the old
+# versioned directory is deleted (the CODEX_CLI env var goes stale).
+CODEX_BIN=""
+
+# Tier 1: Explicit env var override (only if the binary actually exists)
+if [ -n "${CODEX_CLI:-}" ] && [ -x "$CODEX_CLI" ]; then
+  CODEX_BIN="$CODEX_CLI"
+fi
+
+# Tier 2: PATH lookup (Homebrew, npm global, etc. — stable across updates)
+if [ -z "$CODEX_BIN" ] && command -v codex >/dev/null 2>&1; then
+  CODEX_BIN=$(command -v codex)
+fi
+
+# Tier 3: VS Code extension paths (newest first, verify each is executable)
 if [ -z "$CODEX_BIN" ]; then
-  CODEX_BIN=$(ls -t ~/.vscode/extensions/openai.chatgpt-*/bin/*/codex 2>/dev/null | head -1)
+  for candidate in $(ls -t ~/.vscode/extensions/openai.chatgpt-*/bin/*/codex 2>/dev/null); do
+    if [ -x "$candidate" ]; then
+      CODEX_BIN="$candidate"
+      break
+    fi
+  done
 fi
 
 if [ -z "$CODEX_BIN" ] || [ ! -x "$CODEX_BIN" ]; then
-  echo "WARNING: Codex CLI not found. Set CODEX_CLI env var or install the Codex VS Code extension." >&2
+  echo "WARNING: Codex CLI not found. Install via Homebrew (brew install codex), set CODEX_CLI env var, or install the Codex VS Code extension." >&2
   rm -f "$MARKER"
   exit 0
 fi
 
-# Determine the repo root (parent of agent-loop/)
-REPO_ROOT=$(echo "$FILE_PATH" | sed 's|/agent-loop/.*||')
+# Determine the repo root — prefer CWD from hook input, fall back to path parsing
+REPO_ROOT=$(echo "$INPUT" | jq -r '.cwd // empty')
+if [ -z "$REPO_ROOT" ]; then
+  REPO_ROOT=$(echo "$FILE_PATH" | sed 's|/agent-loop/.*||')
+fi
 
 # Log file for this invocation
 LOG_FILE="/tmp/codex-judge-${TASK_ID}-${PHASE}-round-${ROUND}.log"
@@ -82,7 +131,7 @@ echo "=== AUTO-JUDGE HOOK FIRED ==="
 echo "  Task:    $TASK_ID"
 echo "  Phase:   $PHASE"
 echo "  Round:   $ROUND"
-echo "  Model:   gpt-5.4 (xhigh reasoning)"
+echo "  Model:   $CODEX_MODEL (xhigh reasoning)"
 echo "  Codex:   $CODEX_VERSION"
 echo "  Log:     $LOG_FILE"
 echo "  Monitor: tail -f $LOG_FILE"
@@ -101,13 +150,13 @@ cat > "$WRAPPER" <<SCRIPT
 #!/bin/bash
 START_TIME=\$(date +%s)
 echo "[\$(date -Iseconds)] Invoking Codex judge for task=$TASK_ID phase=$PHASE round=$ROUND" > "$LOG_FILE"
-echo "[dispatch] model=gpt-5.4 reasoning=xhigh codex=$CODEX_VERSION" >> "$LOG_FILE"
+echo "[dispatch] model=$CODEX_MODEL reasoning=xhigh codex=$CODEX_VERSION" >> "$LOG_FILE"
 echo "[dispatch] repo=$REPO_ROOT" >> "$LOG_FILE"
 echo "" >> "$LOG_FILE"
 
 "$CODEX_BIN" exec \\
   --full-auto \\
-  -m gpt-5.4 \\
+  -m "$CODEX_MODEL" \\
   -c 'model_reasoning_effort="xhigh"' \\
   -C "$REPO_ROOT" \\
   "judge $TASK_ID" \\
