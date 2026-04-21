@@ -203,9 +203,13 @@ def bca_ci(
         ci_lower = float(result.confidence_interval.low)
         ci_upper = float(result.confidence_interval.high)
         method = CIMethod.BCA
-    except (ValueError, RuntimeWarning, ZeroDivisionError) as exc:
+    except (ValueError, ZeroDivisionError) as exc:
         # scipy raises ValueError for degenerate samples (all identical) and
         # ZeroDivisionError when bootstrap acceleration hits a zero variance.
+        # RuntimeWarning is not raised as an exception — warnings propagate
+        # via the warnings module; scipy's degenerate cases either raise
+        # ValueError or return finite fallback bounds, so no warning capture
+        # is needed here.
         logger.warning(
             "BCa bootstrap fell back to normal CI (n=%d): %s", len(values), exc,
         )

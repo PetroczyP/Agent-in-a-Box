@@ -156,11 +156,13 @@ class CopilotReviewClient:
 
         session_key = f"copilot-{uuid.uuid4().hex[:12]}"
         resolved_model = model or self._selected_model
-        session = await self._sdk_client.create_session(
-            on_permission_request=self._approve_all_permissions,
-            system_message={"content": system_prompt},
-            model=resolved_model,
-        )
+        session_kwargs: dict[str, Any] = {
+            "on_permission_request": self._approve_all_permissions,
+            "system_message": {"content": system_prompt},
+        }
+        if resolved_model is not None:
+            session_kwargs["model"] = resolved_model
+        session = await self._sdk_client.create_session(**session_kwargs)
         self._sessions[session_key] = session
         return session_key
 

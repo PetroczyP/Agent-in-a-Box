@@ -13,6 +13,6 @@ def get_headers():
 
 def fetch_data(endpoint):
     url = f"{API_BASE}/{endpoint}"
-    resp = requests.get(url, headers=get_headers())
+    resp = requests.get(url, headers=get_headers(), timeout=10)
     resp.raise_for_status()
     return resp.json()

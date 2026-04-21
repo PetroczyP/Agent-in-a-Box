@@ -130,4 +130,4 @@ MCP `call_tool` returns `CallToolResult` with a `content` list. The eval harness
 1. Extracts the first `TextContent` item from `result.content`
 2. Parses the text as JSON
 3. Validates against the expected Pydantic model (`ReviewResult`, `DiscussResult`, `ReviewSummary`)
-4. On parse failure: logs the raw response and marks the trial as `error`
+4. On parse failure: logs a redacted summary (tool name, session ID, parse error, payload size, and a SHA-256 hash of the payload) and marks the trial as `error`. Raw response bodies MUST NOT be written to logs or CI output — reviewed-bundle content and secrets may be present.

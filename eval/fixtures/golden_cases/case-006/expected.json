@@ -6,7 +6,7 @@
       "severity": "BUG",
       "category": "security",
       "file": "config.py",
-      "approximate_line": 5,
+      "approximate_line": 3,
       "description": "API key is hardcoded as a string literal in source code instead of being loaded from environment variables or a secrets manager."
     }
   ],

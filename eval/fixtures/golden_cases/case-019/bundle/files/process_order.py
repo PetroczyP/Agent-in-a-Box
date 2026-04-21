@@ -14,22 +14,26 @@ def process_order(order_data: dict) -> dict:
     if total <= 0:
         raise ValueError("Order total must be positive")
 
-    # Store in database
+    # Store in database (email-then-commit so a failed send does not leave
+    # an unconfirmed row persisted).
     conn = sqlite3.connect("orders.db")
-    cursor = conn.execute(
-        "INSERT INTO orders (email, total) VALUES (?, ?)",
-        (order_data["customer_email"], total),
-    )
-    order_id = cursor.lastrowid
-    conn.commit()
-    conn.close()
+    try:
+        cursor = conn.execute(
+            "INSERT INTO orders (email, total) VALUES (?, ?)",
+            (order_data["customer_email"], total),
+        )
+        order_id = cursor.lastrowid
 
-    # Send confirmation email
-    msg = MIMEText(f"Your order #{order_id} for ${total:.2f} is confirmed.")
-    msg["Subject"] = "Order Confirmation"
-    msg["To"] = order_data["customer_email"]
-    with smtplib.SMTP("localhost", 587) as server:
-        server.send_message(msg)
+        # Send confirmation email before committing
+        msg = MIMEText(f"Your order #{order_id} for ${total:.2f} is confirmed.")
+        msg["Subject"] = "Order Confirmation"
+        msg["To"] = order_data["customer_email"]
+        with smtplib.SMTP("localhost", 587) as server:
+            server.send_message(msg)
+
+        conn.commit()
+    finally:
+        conn.close()
 
     # Log the event
     logging.info("Order %s created for %s, total=$%.2f", order_id, order_data["customer_email"], total)

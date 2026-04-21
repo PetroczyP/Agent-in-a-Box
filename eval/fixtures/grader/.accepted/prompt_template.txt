@@ -22,6 +22,6 @@ Respond with ONLY a JSON object:
 {{
   "verdict": "match" | "partial_match" | "novel_valid" | "no_match",
   "confidence": "high" | "medium" | "low",
-  "matched_expected_id": "EF-001" | null,
+  "matched_expected_id": "<one expected_id from Expected Findings, or null>",
   "reasoning": "Brief explanation"
 }}

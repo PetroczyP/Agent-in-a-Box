@@ -214,19 +214,28 @@ class FindingParser:
 
     @staticmethod
     def _dedupe_by_content(candidates: list[str]) -> list[str]:
-        """Deduplicate JSON candidate strings by whitespace-normalized content.
+        """Deduplicate JSON candidate strings by canonical content.
 
         Models occasionally emit the same findings in multiple trusted
         containers (e.g., both a code fence and sentinel block).  Without
         dedup the same finding would be assigned two F-NNN ids and inflate
-        downstream metrics.  Normalization collapses whitespace so
-        semantically identical JSON with differing indentation still
-        dedupes.  Order is preserved (first occurrence wins).
+        downstream metrics.  Parsing + re-serializing with sorted keys
+        produces a canonical form that ignores incidental indentation but
+        preserves whitespace inside JSON string values.  Non-JSON candidates
+        fall back to the raw string as the key.  Order is preserved (first
+        occurrence wins).
         """
         seen: set[str] = set()
         unique: list[str] = []
         for candidate in candidates:
-            key = "".join(candidate.split())
+            try:
+                key = json.dumps(
+                    json.loads(candidate),
+                    sort_keys=True,
+                    separators=(",", ":"),
+                )
+            except (json.JSONDecodeError, ValueError, TypeError):
+                key = candidate.strip()
             if key in seen:
                 continue
             seen.add(key)

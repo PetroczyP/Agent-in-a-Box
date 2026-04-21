@@ -30,6 +30,9 @@ def grade_finding(
     matched. If an expected finding is already claimed, it's skipped. If a match
     is found, the expected ID is added to the set.
     """
+    if line_tolerance < 0:
+        raise ValueError(f"line_tolerance must be >= 0, got {line_tolerance}")
+
     # Build list of (line_distance, index, expected) for all matching candidates.
     candidates: list[tuple[int, int, ExpectedFinding]] = []
 

@@ -127,7 +127,7 @@ The eval suite can be run as part of the CI pipeline. When a PR changes the revi
 - **FR-008**: The harness MUST run against a live AgentinaBox instance (not mocked). Eval results reflect actual model behavior.
 - **FR-009**: The harness MUST produce a scorecard in both human-readable (markdown table) and machine-readable (JSON) format
 - **FR-010**: The harness MUST support a `--ci` mode that exits with code 0/1 based on threshold pass/fail
-- **FR-011**: The harness MUST handle non-deterministic model responses by supporting multiple eval runs (configurable, default: 3) and reporting metrics as averages with standard deviation
+- **FR-011**: The harness MUST handle non-deterministic model responses by supporting multiple eval runs (configurable, default: 3) and reporting metrics as means with standard error of the mean (SEM) alongside the 95% CI bounds defined in FR-016
 - **FR-012**: The harness MUST support configurable metric thresholds that can be overridden per project or per CI pipeline
 - **FR-012a**: In `--ci` mode, the harness MUST output the scorecard as a markdown-formatted string suitable for posting as a GitHub PR comment. The output MUST include a before/after comparison when a previous baseline run exists. The harness is NOT responsible for the GitHub API call itself — the CI pipeline (e.g., GitHub Actions workflow) posts the comment using the harness output.
 
@@ -142,7 +142,7 @@ The eval suite can be run as part of the CI pipeline. When a PR changes the revi
 
 #### Statistical Reporting
 
-- **FR-016**: When multiple trials are run (FR-011), the harness MUST report SEM alongside averages for all numeric metrics. For threshold comparisons, the harness MUST use the lower bound of a 95% confidence interval, not the raw mean, to ensure statistical confidence in pass/fail decisions. CI method varies by metric type: Wilson score interval for Bernoulli proportions (fp_rate, rebuttal_accuracy), BCa bootstrap for per-trial rate aggregations (precision, recall, severity_accuracy, category_accuracy, SNR). The CI method used MUST be recorded in the metric output (`method` field).
+- **FR-016**: When multiple trials are run (FR-011), the harness MUST report SEM alongside averages for all numeric metrics. For threshold comparisons, the harness MUST use the tail of a 95% confidence interval that is most conservative for the threshold direction, not the raw mean, to ensure statistical confidence in pass/fail decisions: metrics with lower-bound (`>=`) semantics — precision, recall, severity_accuracy, category_accuracy, SNR, rebuttal_accuracy, pass@k — compare the **lower** CI bound against the threshold; metrics with upper-bound (`<=`) semantics — fp_rate — compare the **upper** CI bound against the threshold. CI method varies by metric type: Wilson score interval for Bernoulli proportions (fp_rate, rebuttal_accuracy, pass@k), BCa bootstrap for per-trial rate aggregations (precision, recall, severity_accuracy, category_accuracy, SNR). Both the CI method and the tail used for thresholding MUST be recorded in the metric output (`method` field).
 - **FR-017**: The harness MUST report both pass@1 (found on first trial) and pass@3 (found in at least one of 3 trials) for each expected finding. The gap between pass@1 and pass@3 indicates review reliability.
 
 #### Multi-Tier Grading

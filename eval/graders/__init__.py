@@ -1,6 +1,8 @@
 """Grader package: Tier 1 fingerprint + Tier 2 LLM-as-Judge."""
 
-DEFAULT_GRADER_MODEL = "claude-sonnet-4-6"
+import os
+
+DEFAULT_GRADER_MODEL = os.environ.get("GRADER_MODEL", "claude-sonnet-4-6")
 
 
 class MissingGraderCredentialError(Exception):
