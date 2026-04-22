@@ -6,7 +6,7 @@ The eval harness acts as an MCP **client** that connects to the AgentinaBox revi
 
 ## Connection
 
-```
+```text
 Host (eval harness)                    Docker container (reviewer)
 ┌──────────────┐     docker exec -i    ┌──────────────────────┐
 │ stdio_client │ ──── stdin/stdout ───→ │ python -m server.    │

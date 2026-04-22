@@ -90,6 +90,7 @@ def metric_with_sem(
         ci_upper=ci_upper,
         passes_threshold=passes,
         method=CIMethod.NORMAL,
+        ci_tail="upper" if direction == "lte" else "lower",
     )
 
 
@@ -112,6 +113,7 @@ def wilson_ci(
             ci_upper=0.0,
             passes_threshold=(direction == "lte"),
             method=CIMethod.WILSON,
+            ci_tail="upper" if direction == "lte" else "lower",
         )
 
     p_hat = successes / total
@@ -139,6 +141,7 @@ def wilson_ci(
         ci_upper=ci_upper,
         passes_threshold=passes,
         method=CIMethod.WILSON,
+        ci_tail="upper" if direction == "lte" else "lower",
     )
 
 
@@ -169,6 +172,7 @@ def bca_ci(
                 mean <= threshold if direction == "lte" else mean >= threshold
             ),
             method=CIMethod.BCA,
+            ci_tail="upper" if direction == "lte" else "lower",
         )
 
     stdev = statistics.stdev(values)
@@ -189,6 +193,7 @@ def bca_ci(
             ci_upper=ci_upper,
             passes_threshold=passes,
             method=CIMethod.NORMAL,
+            ci_tail="upper" if direction == "lte" else "lower",
         )
 
     try:
@@ -229,6 +234,7 @@ def bca_ci(
         ci_upper=ci_upper,
         passes_threshold=passes,
         method=method,
+        ci_tail="upper" if direction == "lte" else "lower",
     )
 
 
@@ -492,6 +498,7 @@ def aggregate_metrics(
         else MetricWithSEM(
             mean=0.0, sem=0.0, ci_lower=0.0, ci_upper=0.0,
             passes_threshold=False, method=CIMethod.UNDEFINED,
+            ci_tail="lower",
         )
     )
     category_accuracy_ci = (
@@ -500,6 +507,7 @@ def aggregate_metrics(
         else MetricWithSEM(
             mean=0.0, sem=0.0, ci_lower=0.0, ci_upper=0.0,
             passes_threshold=False, method=CIMethod.UNDEFINED,
+            ci_tail="lower",
         )
     )
 
@@ -515,6 +523,7 @@ def aggregate_metrics(
         fp_rate_ci = MetricWithSEM(
             mean=0.0, sem=0.0, ci_lower=0.0, ci_upper=0.0,
             passes_threshold=True, method=CIMethod.VACUOUS,
+            ci_tail="upper",
         )
 
     # --- SNR via BCa bootstrap ---
@@ -525,6 +534,7 @@ def aggregate_metrics(
         snr_ci = MetricWithSEM(
             mean=0.0, sem=0.0, ci_lower=0.0, ci_upper=0.0,
             passes_threshold=True, method=CIMethod.VACUOUS,
+            ci_tail="lower",
         )
 
     # --- Severity QWK ---
@@ -723,6 +733,7 @@ def compute_rebuttal_accuracy(
             ci_upper=result.ci_upper,
             passes_threshold=result.passes_threshold,
             method=CIMethod.WILSON_INSUFFICIENT_N,
+            ci_tail=result.ci_tail,
         )
 
     return result

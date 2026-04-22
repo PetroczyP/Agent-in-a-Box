@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
+from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -280,6 +281,7 @@ class MetricWithSEM(BaseModel):
     ci_upper: float
     passes_threshold: bool
     method: CIMethod = CIMethod.NORMAL
+    ci_tail: Literal["lower", "upper"] = "lower"
 
     @property
     def status(self) -> MetricStatus:
