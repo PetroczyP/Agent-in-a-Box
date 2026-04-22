@@ -11,6 +11,7 @@ to Pydantic models.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 from contextlib import asynccontextmanager
@@ -101,13 +102,30 @@ def _parse_compose_ps_output(raw: str) -> list[dict]:
     stripped = raw.strip()
     if not stripped:
         return []
-    if stripped.startswith("["):
-        parsed = json.loads(stripped)
-        return parsed if isinstance(parsed, list) else []
-    return [json.loads(line) for line in stripped.splitlines() if line.strip()]
+    try:
+        if stripped.startswith("["):
+            parsed = json.loads(stripped)
+            return parsed if isinstance(parsed, list) else []
+        return [json.loads(line) for line in stripped.splitlines() if line.strip()]
+    except json.JSONDecodeError as exc:
+        # Upgrade to RuntimeError so callers (detect_container) see the
+        # documented exception type instead of the raw JSONDecodeError
+        # leaking through the abstraction.
+        raise RuntimeError(
+            f"Failed to parse `docker compose ps --format json` output: {exc}"
+        ) from exc
 
 
-def _parse_tool_result(result: object) -> dict:
+def _redacted_payload_summary(text: str) -> str:
+    # Reviewed bundles and model responses may contain secrets or customer
+    # code; never echo the raw body. Emit only size + SHA-256 so operators
+    # can correlate without exposing content (mirrors mcp-transport.md
+    # parse-failure contract).
+    digest = hashlib.sha256(text.encode("utf-8", errors="replace")).hexdigest()
+    return f"{len(text)}B sha256={digest[:16]}"
+
+
+def _parse_tool_result(result: object, tool_name: str = "<unknown>") -> dict:
     """Extract and parse JSON from an MCP CallToolResult.
 
     1. Get the first item from ``result.content``
@@ -123,18 +141,22 @@ def _parse_tool_result(result: object) -> dict:
     """
     content = getattr(result, "content", [])
     if not content:
-        raise RuntimeError("No content in MCP tool result (empty content list)")
+        raise RuntimeError(
+            f"No content in MCP tool result for {tool_name} (empty content list)"
+        )
 
     text = getattr(content[0], "text", None)
     if not isinstance(text, str):
         raise RuntimeError(
-            f"MCP tool result content[0] has no text attribute: {content[0]!r}"
+            f"MCP tool result for {tool_name} content[0] has no text attribute "
+            f"(type={type(content[0]).__name__})"
         )
     try:
         data = json.loads(text)
     except (json.JSONDecodeError, TypeError) as exc:
         raise RuntimeError(
-            f"Failed to parse MCP tool response as JSON: {text}"
+            f"Failed to parse MCP tool response for {tool_name} as JSON: "
+            f"{exc} (payload {_redacted_payload_summary(text)})"
         ) from exc
 
     # Check for MCP error responses
@@ -182,7 +204,7 @@ async def _call_with_retry(
     for attempt in range(max_retries):
         try:
             result = await session.call_tool(tool_name, arguments=arguments)
-            return _parse_tool_result(result)
+            return _parse_tool_result(result, tool_name=tool_name)
         except MCPRetryableError as exc:
             wait_time = 2 ** attempt
             logger.warning(

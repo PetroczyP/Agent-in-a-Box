@@ -1,6 +1,6 @@
 import requests
 
-API_KEY = "sk-proj-4f8a2b1c9d3e7f6a5b0c8d2e1f4a7b3c"
+API_KEY = "DUMMY_API_KEY_FOR_EVAL_FIXTURE_DO_NOT_USE"
 API_BASE = "https://api.example.com/v1"
 
 

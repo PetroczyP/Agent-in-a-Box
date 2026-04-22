@@ -5,9 +5,6 @@ from __future__ import annotations
 import pytest
 
 from eval.models import (
-    CaseResult,
-    CaseSummary,
-    DualMetricConfig,
     ExpectedFinding,
     GoldenCase,
     GoldenCaseSource,
@@ -15,15 +12,12 @@ from eval.models import (
     GraderResult,
     GraderVerdict,
     MetricWithSEM,
-    RebuttalResult,
     TrialMetrics,
     TrialResult,
-    TurnScript,
 )
 from server.models import (
     Category,
     Finding,
-    FindingStatus,
     Location,
     ReviewBundle,
     Severity,

@@ -225,7 +225,13 @@ class TestCallStartReview:
 
     @pytest.mark.asyncio
     async def test_parse_failure_raises_runtime_error(self) -> None:
-        """Non-JSON response raises RuntimeError with raw text."""
+        """Non-JSON response raises RuntimeError with a redacted summary.
+
+        Per mcp-transport.md, the raw payload MUST NOT appear in error logs —
+        reviewed bundles may contain secrets. Assert the error carries the
+        tool name and a size+hash summary, and explicitly verify the raw
+        body is NOT echoed.
+        """
         from eval.mcp_client import call_start_review
 
         bad_result = MagicMock()
@@ -238,8 +244,11 @@ class TestCallStartReview:
         mock_session = AsyncMock()
         mock_session.call_tool = AsyncMock(return_value=bad_result)
 
-        with pytest.raises(RuntimeError, match="NOT VALID JSON"):
+        with pytest.raises(RuntimeError, match="start_review") as exc_info:
             await call_start_review(mock_session, _sample_bundle(), "c1")
+        msg = str(exc_info.value)
+        assert "NOT VALID JSON" not in msg
+        assert "payload" in msg and "sha256=" in msg
 
     @pytest.mark.asyncio
     async def test_empty_content_raises_runtime_error(self) -> None:
@@ -310,7 +319,7 @@ class TestCallDiscuss:
 
     @pytest.mark.asyncio
     async def test_parse_failure_raises_runtime_error(self) -> None:
-        """Non-JSON discuss response raises RuntimeError."""
+        """Non-JSON discuss response raises RuntimeError with a redacted summary."""
         from eval.mcp_client import call_discuss
 
         bad_result = MagicMock()
@@ -323,8 +332,11 @@ class TestCallDiscuss:
         mock_session = AsyncMock()
         mock_session.call_tool = AsyncMock(return_value=bad_result)
 
-        with pytest.raises(RuntimeError, match="<html>error</html>"):
+        with pytest.raises(RuntimeError, match="discuss") as exc_info:
             await call_discuss(mock_session, "s-1", "msg")
+        msg = str(exc_info.value)
+        assert "<html>error</html>" not in msg
+        assert "payload" in msg and "sha256=" in msg
 
 
 # ===========================================================================
@@ -391,7 +403,7 @@ class TestCallGetReviewSummary:
 
     @pytest.mark.asyncio
     async def test_parse_failure_raises_runtime_error(self) -> None:
-        """Non-JSON summary response raises RuntimeError."""
+        """Non-JSON summary response raises RuntimeError with a redacted summary."""
         from eval.mcp_client import call_get_review_summary
 
         bad_result = MagicMock()
@@ -404,8 +416,11 @@ class TestCallGetReviewSummary:
         mock_session = AsyncMock()
         mock_session.call_tool = AsyncMock(return_value=bad_result)
 
-        with pytest.raises(RuntimeError, match="Server Error 500"):
+        with pytest.raises(RuntimeError, match="get_review_summary") as exc_info:
             await call_get_review_summary(mock_session, "s-1")
+        msg = str(exc_info.value)
+        assert "Server Error 500" not in msg
+        assert "payload" in msg and "sha256=" in msg
 
 
 # ===========================================================================
@@ -536,6 +551,26 @@ class TestDetectContainer:
 
         with patch("asyncio.create_subprocess_exec", return_value=mock_proc):
             with pytest.raises(RuntimeError, match="[Nn]o.*container"):
+                await detect_container()
+
+    @pytest.mark.asyncio
+    async def test_malformed_json_raises_runtime_error_not_json_error(self) -> None:
+        """Malformed `docker compose ps` output surfaces as RuntimeError.
+
+        ``detect_container`` documents RuntimeError as its failure mode; a
+        raw ``json.JSONDecodeError`` leaking through would break the
+        documented contract and the CLI's exit-code handling.
+        """
+        from eval.mcp_client import detect_container
+
+        mock_proc = AsyncMock()
+        mock_proc.communicate = AsyncMock(
+            return_value=(b"not json at all { { {", b"")
+        )
+        mock_proc.returncode = 0
+
+        with patch("asyncio.create_subprocess_exec", return_value=mock_proc):
+            with pytest.raises(RuntimeError, match="docker compose ps"):
                 await detect_container()
 
 
