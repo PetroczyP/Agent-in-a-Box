@@ -159,8 +159,15 @@ def _parse_tool_result(result: object, tool_name: str = "<unknown>") -> dict:
             f"{exc} (payload {_redacted_payload_summary(text)})"
         ) from exc
 
+    if not isinstance(data, dict):
+        raise RuntimeError(
+            f"MCP tool response for {tool_name} must be a JSON object "
+            f"(got {type(data).__name__}; payload "
+            f"{_redacted_payload_summary(text)})"
+        )
+
     # Check for MCP error responses
-    error_type = data.get("error") if isinstance(data, dict) else None
+    error_type = data.get("error")
     if error_type:
         if error_type in _RETRYABLE_ERRORS:
             raise MCPRetryableError(
@@ -206,12 +213,16 @@ async def _call_with_retry(
             result = await session.call_tool(tool_name, arguments=arguments)
             return _parse_tool_result(result, tool_name=tool_name)
         except MCPRetryableError as exc:
+            last_error = exc
+            if attempt >= max_retries - 1:
+                # Final attempt: don't sleep before raising — the wait would
+                # be wasted since no further retry follows.
+                break
             wait_time = 2 ** attempt
             logger.warning(
                 "MCP %s (attempt %d/%d), waiting %ds: %s",
                 tool_name, attempt + 1, max_retries, wait_time, exc,
             )
-            last_error = exc
             await asyncio.sleep(wait_time)
         except (MCPAbortError, MCPSkipCaseError):
             raise

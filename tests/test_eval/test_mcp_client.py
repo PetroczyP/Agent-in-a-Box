@@ -623,6 +623,21 @@ class TestRetryBackoff:
         with pytest.raises(MCPSkipCaseError, match="content_denied"):
             _parse_tool_result(result)
 
+    # ---- _parse_tool_result: non-object payloads ----
+
+    def test_parse_rejects_non_object_json(self) -> None:
+        """JSON lists/strings/numbers violate the -> dict contract."""
+        from eval.mcp_client import _parse_tool_result
+
+        tc = MagicMock()
+        tc.type = "text"
+        tc.text = "[1, 2, 3]"
+        result = MagicMock()
+        result.content = [tc]
+        result.isError = False
+        with pytest.raises(RuntimeError, match="must be a JSON object"):
+            _parse_tool_result(result, tool_name="start_review")
+
     # ---- _call_with_retry: retryable with exponential backoff ----
 
     @pytest.mark.asyncio
@@ -721,4 +736,7 @@ class TestRetryBackoff:
                 )
 
         assert mock_session.call_tool.await_count == 2
-        assert mock_sleep.await_count == 2
+        # Sleep happens only between attempts — not after the final failure,
+        # which would waste time before raising.
+        assert mock_sleep.await_count == 1
+        mock_sleep.assert_any_await(1)
