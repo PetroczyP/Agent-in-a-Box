@@ -1,0 +1,10 @@
+{
+  "case_id": "case-025",
+  "description": "Bug-fix PR that patches XSS by escaping user input before rendering. Dual-metric case.",
+  "source": "bug_fix_pr",
+  "tags": ["security", "python", "dual-metric"],
+  "dual_metric": {
+    "vulnerable_dir": "bundle",
+    "fixed_dir": "bundle-fixed"
+  }
+}

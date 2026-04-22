@@ -754,13 +754,74 @@ class TestDiscussReconciliation:
         assert "div-by-zero" in rule_ids
         assert "broad-except" in rule_ids
 
+    async def test_discuss_downgrade_updates_severity_on_same_fingerprint(
+        self, mock_copilot_client
+    ):
+        """F14 regression: a follow-up response can keep ``status=open`` while
+        lowering severity/category/message (spec.md:48-49 "dismissed or
+        downgraded"). Reconciliation must copy those updates — prior code
+        only copied non-OPEN status transitions, so downgrades were silently
+        dropped.
+        """
+        # Initial review: BUG severity on math.py:5.
+        review_response = (
+            '```json\n'
+            '[{"severity": "BUG", "category": "correctness", '
+            '"rule_id": "div-by-zero", "message": "Division by zero crashes at runtime", '
+            '"file": "math.py", "start_line": 5, "end_line": 5, '
+            '"evidence": "x = 1 / n", "confidence": "high"}]\n'
+            '```'
+        )
+        # Discuss returns SAME fingerprint (same rule_id + file + snippet)
+        # but downgraded to WARN with a softer message and status still open.
+        discuss_response = (
+            "You make a fair point — lowering severity but keeping it open.\n\n"
+            '```json\n'
+            '[{"severity": "WARN", "category": "correctness", '
+            '"rule_id": "div-by-zero", "message": "Division by zero is only reachable in edge cases", '
+            '"file": "math.py", "start_line": 5, "end_line": 5, '
+            '"evidence": "x = 1 / n", "confidence": "medium", "status": "open"}]\n'
+            '```'
+        )
+        mock_copilot_client.send_review = AsyncMock(return_value=review_response)
+        mock_copilot_client.send_followup = AsyncMock(return_value=discuss_response)
+        engine = ReviewEngine(
+            copilot=mock_copilot_client,
+            store=SessionStore(),
+            denylist=ContentDenylist(),
+        )
+        bundle = ReviewBundle(
+            diff="--- a/math.py\n+++ b/math.py",
+            files={"math.py": "\n\n\n\nx = 1 / n\n"},
+            branch="test",
+        )
+        review_result = await engine.start_review(bundle)
+        assert len(review_result.findings) == 1
+        assert review_result.findings[0].severity == Severity.BUG
+
+        request = DiscussRequest(
+            session_id=review_result.session_id,
+            message="Is this really a BUG?",
+        )
+        result = await engine.discuss(request)
+
+        assert len(result.updated_findings) == 1
+        downgraded = result.updated_findings[0]
+        assert downgraded.severity == Severity.WARN, (
+            f"Expected downgrade to WARN, got {downgraded.severity}. "
+            "Reconciliation dropped the severity update."
+        )
+        assert "edge cases" in downgraded.message
+        # finding_id must remain stable
+        assert downgraded.finding_id == review_result.findings[0].finding_id
+
     async def test_discuss_empty_findings_preserves_originals(
         self, mock_copilot_client
     ):
         """When discuss response has no new findings, originals are preserved."""
         review_response = (
             '```json\n'
-            '[{"severity": "BUG", "message": "bug", '
+            '[{"severity": "BUG", "category": "correctness", "message": "bug", '
             '"file": "a.py", "start_line": 1}]\n'
             '```'
         )
@@ -785,3 +846,40 @@ class TestDiscussReconciliation:
         # Original findings preserved
         assert len(result.updated_findings) == 1
         assert result.updated_findings[0].severity == Severity.BUG
+
+    async def test_discuss_plain_text_response_does_not_fabricate_finding(
+        self, mock_copilot_client
+    ):
+        """When the model drifts off-format and returns plain text with no
+        JSON block, discuss must NOT append a phantom unparseable-response
+        finding and must not flip the session away from its prior state."""
+        review_response = (
+            '```json\n'
+            '[{"severity": "BUG", "category": "correctness", "message": "bug", '
+            '"file": "a.py", "start_line": 1}]\n'
+            '```'
+        )
+        # Plain conversational text with no JSON block — the fallback path
+        # that used to fabricate an unparseable-response finding.
+        discuss_response = "Thanks for clarifying. Let me think about that."
+        mock_copilot_client.send_review = AsyncMock(return_value=review_response)
+        mock_copilot_client.send_followup = AsyncMock(return_value=discuss_response)
+        engine = ReviewEngine(
+            copilot=mock_copilot_client,
+            store=SessionStore(),
+            denylist=ContentDenylist(),
+        )
+        bundle = ReviewBundle(
+            diff="diff", files={"a.py": "x=1\n"}, branch="test"
+        )
+        review_result = await engine.start_review(bundle)
+        request = DiscussRequest(
+            session_id=review_result.session_id,
+            message="Thoughts?",
+        )
+        result = await engine.discuss(request)
+
+        # No phantom unparseable-response finding — originals stay intact.
+        assert len(result.updated_findings) == 1
+        rule_ids = {f.rule_id for f in result.updated_findings}
+        assert "unparseable-response" not in rule_ids

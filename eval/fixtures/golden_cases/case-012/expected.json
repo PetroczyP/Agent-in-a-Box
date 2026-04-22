@@ -1,0 +1,14 @@
+{
+  "expected_findings": [
+    {
+      "expected_id": "EF-012",
+      "rule_id": "resource-leak",
+      "severity": "WARN",
+      "category": "correctness",
+      "file": "processor.py",
+      "approximate_line": 8,
+      "description": "File handle opened with open() in a loop is never closed, especially when the early break is taken, leaking file descriptors."
+    }
+  ],
+  "expected_non_findings": []
+}

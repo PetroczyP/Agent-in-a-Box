@@ -1,0 +1,6 @@
+{
+  "case_id": "case-005",
+  "description": "Path traversal vulnerability in file download endpoint",
+  "source": "hand_curated",
+  "tags": ["security", "python"]
+}

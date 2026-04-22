@@ -1,0 +1,14 @@
+{
+  "expected_findings": [
+    {
+      "expected_id": "EF-019",
+      "rule_id": "god-function",
+      "severity": "WARN",
+      "category": "design",
+      "file": "process_order.py",
+      "approximate_line": 5,
+      "description": "Function handles too many responsibilities"
+    }
+  ],
+  "expected_non_findings": []
+}

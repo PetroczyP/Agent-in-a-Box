@@ -1,0 +1,49 @@
+diff --git a/cache_decorator.py b/cache_decorator.py
+new file mode 100644
+index 0000000..a1d5e7f
+--- /dev/null
++++ b/cache_decorator.py
+@@ -0,0 +1,43 @@
++"""Custom cache decorator with TTL support."""
++
++import time
++from functools import wraps
++from typing import Any, Callable
++
++
++def ttl_cache(max_size: int = 128, ttl_seconds: int = 300) -> Callable:
++    """Decorator that caches function results with a time-to-live expiration.
++
++    Unlike functools.lru_cache, this cache evicts entries after ttl_seconds
++    regardless of access pattern, which is needed for API rate limit compliance.
++
++    Args:
++        max_size: Maximum number of entries in the cache.
++        ttl_seconds: Seconds before a cached entry expires.
++    """
++    def decorator(func: Callable) -> Callable:
++        cache: dict[str, tuple[float, Any]] = {}
++
++        @wraps(func)
++        def wrapper(*args: Any, **kwargs: Any) -> Any:
++            key = str((args, sorted(kwargs.items())))
++            now = time.monotonic()
++
++            if key in cache:
++                timestamp, value = cache[key]
++                if now - timestamp < ttl_seconds:
++                    return value
++                del cache[key]
++
++            # Evict oldest entries if at capacity
++            if len(cache) >= max_size:
++                oldest_key = min(cache, key=lambda k: cache[k][0])
++                del cache[oldest_key]
++
++            result = func(*args, **kwargs)
++            cache[key] = (now, result)
++            return result
++
++        wrapper.cache_clear = lambda: cache.clear()
++        return wrapper
++    return decorator

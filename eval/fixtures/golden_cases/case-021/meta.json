@@ -1,0 +1,6 @@
+{
+  "case_id": "case-021",
+  "description": "Docstring contradicts actual function behavior - says ascending but sorts descending",
+  "source": "hand_curated",
+  "tags": ["documentation", "python"]
+}

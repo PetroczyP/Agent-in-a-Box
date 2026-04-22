@@ -1,0 +1,6 @@
+{
+  "case_id": "case-018",
+  "description": "Pytest fixtures for integration tests: mock DB session, sample data, async HTTP client with MockTransport, and auth headers.",
+  "source": "hand_curated",
+  "tags": ["clean", "python", "tests"]
+}

@@ -1,0 +1,14 @@
+{
+  "expected_findings": [
+    {
+      "expected_id": "EF-003",
+      "rule_id": "csv-missing-loads",
+      "severity": "BUG",
+      "category": "correctness",
+      "file": "dynamic_loader.py",
+      "approximate_line": 30,
+      "description": "The csv module has no loads() function, so parse_data('csv', raw) will raise AttributeError."
+    }
+  ],
+  "expected_non_findings": []
+}

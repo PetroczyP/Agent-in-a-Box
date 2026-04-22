@@ -4,7 +4,9 @@
 **Created**: 2026-03-13
 **Status**: Draft
 **Depends on**: 001-ai-code-reviewer
-**Interacts with**: 003-review-dashboard (feedback harvesting consumes FindingFeedback entities from spec 003), 012-multi-dimension-review (dimension coverage metric validates multi-persona effectiveness)
+**Interacts with**: 012-multi-dimension-review (dimension coverage metric validates multi-persona effectiveness)
+
+> **Note**: Feedback harvesting (originally User Story 5 in this spec) has been moved to spec 003 (Review Dashboard). Spec 007 is self-contained with no external dependencies beyond spec 001.
 
 ## Why This Exists
 
@@ -27,8 +29,8 @@ A developer changes the reviewer's system prompt or switches the underlying mode
 
 **Acceptance Scenarios**:
 
-1. **Given** a set of 20+ golden test cases with expected findings, **When** a developer runs the eval suite, **Then** each case is sent through `start_review` and the returned findings are compared against expected findings using fingerprint matching.
-2. **Given** the eval suite completes, **When** results are displayed, **Then** a scorecard shows: precision, recall, severity accuracy, category accuracy, false positive rate, and per-case pass/fail.
+1. **Given** a set of 20+ golden test cases with expected findings, **When** a developer runs the eval suite, **Then** each case is sent through `start_review` and the returned findings are graded using the multi-tier pipeline (deterministic fingerprint matching first, then model-based grading for unmatched findings).
+2. **Given** the eval suite completes, **When** results are displayed, **Then** a scorecard shows: precision, recall, severity accuracy, category accuracy, false positive rate, SNR, novel finding count, and per-case pass/fail.
 3. **Given** precision drops below the configured threshold (default: 70%), **When** the eval suite finishes, **Then** the run is marked as FAILED with a clear indication of which cases caused the regression.
 
 ---
@@ -55,11 +57,11 @@ A developer wants to verify the reviewer doesn't invent phantom issues. The eval
 
 **Why this priority**: A reviewer that produces too many false positives trains developers to ignore it. False positive rate is the single most important metric for trust.
 
-**Independent Test**: Can be tested by submitting 5 clean diffs and verifying the reviewer returns zero BUG/WARN findings (NITs are acceptable).
+**Independent Test**: Can be tested by submitting 5 clean diffs and verifying the reviewer returns zero BUG findings (WARNs and NITs are acceptable — WARN-level design observations on clean code are expected reviewer behavior).
 
 **Acceptance Scenarios**:
 
-1. **Given** 5+ clean code test cases with no known issues, **When** the eval runs, **Then** the false positive rate for BUG/WARN findings is below 20%.
+1. **Given** 5+ clean code test cases with no known issues, **When** the eval runs, **Then** the false positive rate for BUG findings is below 20%. WARN findings on clean code are tracked separately as `warn_rate` (informational, no threshold gate).
 2. **Given** a clean code case where the reviewer produces a BUG finding, **When** inspected, **Then** the case is flagged as a false positive in the scorecard with the full finding details for human review.
 
 ---
@@ -79,29 +81,13 @@ The eval suite can be run as part of the CI pipeline. When a PR changes the revi
 
 ---
 
-### User Story 5 - Harvest User Feedback into Golden Cases (Priority: P3)
-
-A developer maintaining AgentinaBox reviews the feedback log from deployed instances (collected via spec 003's finding feedback mechanism). They see a list of user-reported false positives and missed issues, each with the original diff context and the user's note. They select a feedback entry, review it, and with a single command convert it into a new golden test case — the diff becomes the input, the user's report becomes the expected finding (or expected non-finding for false positives).
-
-**Why this priority**: This is the feedback loop that makes the eval suite grow organically from real-world usage rather than relying solely on hand-curated cases. However, it depends on spec 003 being implemented first.
-
-**Independent Test**: Can be tested by creating a mock feedback entry, running the harvest command, and verifying a new golden case directory is created with the correct structure.
-
-**Acceptance Scenarios**:
-
-1. **Given** a feedback entry of type `missed_issue` with diff context and user note, **When** a developer runs the harvest command, **Then** a new golden case is created with the diff as input and the user's description converted into an expected finding (with `rule_id`, approximate severity, and category pre-filled from the user's note).
-2. **Given** a feedback entry of type `false_positive`, **When** harvested, **Then** the golden case is created as an expected non-finding (the reviewer should NOT flag this).
-3. **Given** a feedback entry has been harvested, **When** the feedback log is viewed, **Then** the entry is marked as `harvested` with a link to the golden case it produced.
-
----
-
 ### Edge Cases
 
 - How does the eval handle non-deterministic model responses (same input, different findings)?
 - What happens when the model returns findings not in the expected set but that are still valid?
 - How are "partially correct" findings scored (right issue, wrong line number)?
 - What happens when the Copilot API is rate-limited during an eval run?
-- What happens when a harvested feedback entry has insufficient context to create a golden case? → Flag as `insufficient_context`, require manual enrichment before adding to the suite.
+- How are dual-metric cases scored when the reviewer correctly detects the bug in the vulnerable version but also flags the fixed version? → The "fixed" run is a false positive, reducing precision. Both sub-results contribute independently to aggregate metrics.
 
 ## Requirements *(mandatory)*
 
@@ -119,12 +105,15 @@ A developer maintaining AgentinaBox reviews the feedback log from deployed insta
 
   | Metric | Definition | Default threshold |
   |--------|-----------|-------------------|
-  | Precision | Found findings that match expected / total found findings | >= 70% |
-  | Recall | Expected findings that were found / total expected findings | >= 60% |
-  | Severity accuracy | Findings with correct severity / total matched findings | >= 80% |
-  | Category accuracy | Findings with correct review dimension / total matched findings | >= 70% |
-  | False positive rate (BUG/WARN) | BUG/WARN findings on clean code cases / total clean code cases | <= 20% |
+  | Precision | Matched findings / (matched + no_match findings). Excludes `novel_valid` from both numerator and denominator — they are real findings, not noise. | >= 70% |
+  | Recall | Expected findings that were matched (via Tier 1 or Tier 2) / total expected findings | >= 60% |
+  | Severity accuracy | Adjacency-weighted severity score / unique matched expected findings. Adjacent mismatches (BUG↔WARN, WARN↔NIT) score 0.5; two-step (BUG↔NIT) scores 0.0. When multiple actuals match one expected, best score per expected ID is kept. See Design Note DN-001. | >= 80% |
+  | Category accuracy | Correct category / unique matched expected findings. When multiple actuals match one expected, best score per expected ID is kept. | >= 70% |
+  | False positive rate (BUG) | Clean-code cases with at least one BUG finding / total clean-code cases (per-case binary; compatible with Bernoulli/Wilson CI). WARN findings on clean code are expected reviewer behavior and tracked separately as `warn_rate` (informational; same per-case binary definition). | <= 20% |
   | Rebuttal accuracy | Correct rebuttal decisions / total rebuttal cases | >= 75% |
+  | Signal-to-Noise Ratio (SNR) | (matched + novel_valid) / no_match findings. Novel findings are signal, not noise. | >= 3.0 (internal target; calibrate after initial eval runs) |
+  | Novel finding count | Number of `novel_valid` findings across all cases (informational — tracked separately, not gated) | (informational) |
+  | pass@1 | % of expected findings caught on the first trial (no retry) | (informational) |
 
 - **FR-005**: Finding matching MUST use fingerprint-based comparison (not exact string match). A finding "matches" an expected finding if the `rule_id` matches and the `primary_location` file matches and the line number is within a configurable tolerance (default: +/- 5 lines)
 
@@ -138,27 +127,70 @@ A developer maintaining AgentinaBox reviews the feedback log from deployed insta
 - **FR-008**: The harness MUST run against a live AgentinaBox instance (not mocked). Eval results reflect actual model behavior.
 - **FR-009**: The harness MUST produce a scorecard in both human-readable (markdown table) and machine-readable (JSON) format
 - **FR-010**: The harness MUST support a `--ci` mode that exits with code 0/1 based on threshold pass/fail
-- **FR-011**: The harness MUST handle non-deterministic model responses by supporting multiple eval runs (configurable, default: 3) and reporting metrics as averages with standard deviation
+- **FR-011**: The harness MUST handle non-deterministic model responses by supporting multiple eval runs (configurable, default: 3) and reporting metrics as means with standard error of the mean (SEM) alongside the 95% CI bounds defined in FR-016
 - **FR-012**: The harness MUST support configurable metric thresholds that can be overridden per project or per CI pipeline
+- **FR-012a**: In `--ci` mode, the harness MUST output the scorecard as a markdown-formatted string suitable for posting as a GitHub PR comment. The output MUST include a before/after comparison when a previous baseline run exists. The harness is NOT responsible for the GitHub API call itself — the CI pipeline (e.g., GitHub Actions workflow) posts the comment using the harness output.
 
 #### Robustness
 
 - **FR-013**: The harness MUST handle rate limiting by backing off and retrying (with a maximum retry count), not by failing the entire eval run
 - **FR-014**: The harness MUST report which specific cases passed/failed, not just aggregate metrics, so developers can diagnose regressions
 
-#### Feedback Harvesting
+#### Dual-Metric Testing
 
-- **FR-015**: The harness MUST provide a CLI command to list unharvested feedback entries from a deployed instance's feedback API (spec 003 FR-016)
-- **FR-016**: The harness MUST provide a CLI command to convert a feedback entry into a golden case directory with the correct structure (diff, expected.json, metadata). For `missed_issue` feedback, the expected finding is pre-filled from the user's note. For `false_positive` feedback, an expected non-finding is created
-- **FR-017**: The harness MUST mark feedback entries as `harvested` after successful conversion, preventing duplicate harvesting
-- **FR-018**: Harvested golden cases MUST be flagged as `source: user_feedback` in their metadata to distinguish them from hand-curated and benchmark-sourced cases
+- **FR-015**: For golden cases sourced from bug-fix PRs, the harness MUST support dual-metric testing: the vulnerable version (pre-fix diff) is tested for recall (should detect the bug) AND the fixed version (post-fix diff) is tested for false-positive suppression (should NOT flag it). Both sub-results contribute independently to aggregate metrics.
+
+#### Statistical Reporting
+
+- **FR-016**: When multiple trials are run (FR-011), the harness MUST report SEM alongside averages for all numeric metrics. For threshold comparisons, the harness MUST use the tail of a 95% confidence interval that is most conservative for the threshold direction, not the raw mean, to ensure statistical confidence in pass/fail decisions: metrics with lower-bound (`>=`) semantics — precision, recall, severity_accuracy, category_accuracy, SNR, rebuttal_accuracy, pass@k — compare the **lower** CI bound against the threshold; metrics with upper-bound (`<=`) semantics — fp_rate — compare the **upper** CI bound against the threshold. CI method varies by metric type: Wilson score interval for Bernoulli proportions (fp_rate, rebuttal_accuracy, pass@k), BCa bootstrap for per-trial rate aggregations (precision, recall, severity_accuracy, category_accuracy, SNR). Every metric output MUST record both the CI method used (identifying the algorithm — canonical tokens matching the `CIMethod` enum: `wilson`, `bca`, `normal`, `vacuous`, `wilson_insufficient_n`, `undefined`) and the CI tail used for thresholding (either `lower` for `>=` semantics or `upper` for `<=` semantics) as two distinct, separately parseable fields — the method and the tail MUST NOT be combined into a single ambiguous field. This lets downstream tooling unambiguously interpret thresholding behavior without string-parsing a composite value.
+- **FR-017**: The harness MUST report both pass@1 (found on first trial) and pass@3 (found in at least one of 3 trials) for each expected finding. The gap between pass@1 and pass@3 indicates review reliability.
+
+#### Multi-Tier Grading
+
+- **FR-018**: The harness MUST implement a multi-tier grading pipeline. Each reviewer finding is graded by tiers in order; the first tier that produces a definitive result wins:
+
+  | Tier | Grader type | What it handles | Speed |
+  |------|------------|-----------------|-------|
+  | 1 | Deterministic (code-based) | Fingerprint matches (FR-005): `rule_id` + file + line tolerance. For matched findings, severity and category accuracy are computed directly by comparing the matched pair — no Tier 2 involvement. | Fast, reproducible |
+  | 2 | Model-based (LLM-as-Judge) | Findings that do NOT match any expected finding via fingerprint: same issue described differently, valid findings not in expected set, entirely spurious findings. | Slower, non-deterministic |
+
+  **Routing rule**: Tier 1 runs on all findings first. A finding that matches via fingerprint is resolved entirely by Tier 1 (including severity/category accuracy). Only findings with zero fingerprint matches are forwarded to Tier 2.
+
+- **FR-019**: The model-based grader (Tier 2) MUST use a structured evaluation prompt containing: (a) the golden case's expected findings with descriptions, (b) the reviewer's actual finding text and location, (c) a rubric with explicit scoring criteria and 3+ few-shot examples covering match, partial match, and no-match scenarios, and (d) required output format (structured JSON with `verdict`, `confidence`, and `reasoning` fields).
+
+- **FR-020**: The model-based grader MUST use a different model than the one being evaluated to avoid self-evaluation bias. The grader model and prompt version MUST be recorded in the eval run metadata for reproducibility.
+
+- **FR-021**: The model-based grader MUST classify each finding into one of: `match` (same issue as expected, regardless of wording), `partial_match` (related but different aspect of the same problem — e.g., correct issue, wrong severity), `novel_valid` (a real issue not in the expected set), or `no_match` (noise / false positive). Scoring contract for each verdict:
+
+  | Verdict | Precision numerator | Precision denominator | Recall numerator | SNR numerator | SNR denominator |
+  |---------|--------------------|-----------------------|------------------|---------------|-----------------|
+  | `match` | +1 | +1 | +1 | +1 | — |
+  | `partial_match` | +1 | +1 | +1 | +1 | — |
+  | `novel_valid` | excluded | excluded | — | +1 | — |
+  | `no_match` | — | +1 | — | — | +1 |
+
+  Novel findings count is reported as a separate informational metric. Threshold gating uses precision, recall, and SNR — `novel_valid` findings affect only SNR (as signal).
+
+- **FR-022**: The grader prompt and rubric MUST be versioned alongside the golden cases. Changes to the grader prompt trigger an eval run to measure grading consistency before and after the change.
 
 ### Key Entities
 
 - **Golden Test Case**: A curated input/expected-output pair. Contains: case ID, description, review bundle (diff + files + rules), expected findings (list of `{ rule_id, severity, category, file, approximate_line }`), expected non-findings (optional), and multi-turn script (optional).
 - **Eval Run**: A single execution of the full test suite. Contains: timestamp, model used, number of cases, aggregate metrics, per-case results, and pass/fail status.
 - **Scorecard**: The output of an eval run. Contains aggregate metrics, per-case breakdown, per-metric pass/fail against thresholds, and comparison to previous run (if available).
-- **Golden Case Source**: Metadata tag indicating where a golden case came from. Values: `hand_curated` (manually written), `bug_fix_pr` (traced from real bug-fix commits), `vulnerability_dataset` (from OpenSSF CVE / OWASP / DiverseVul), `user_feedback` (harvested from deployed instance feedback).
+- **Golden Case Source**: Metadata tag indicating where a golden case came from. Values: `hand_curated` (manually written), `bug_fix_pr` (traced from real bug-fix commits), `vulnerability_dataset` (from OpenSSF CVE / OWASP / DiverseVul), `synthetic` (hand-crafted for edge cases).
+- **Grader Result**: The output of grading a single finding. Contains: `tier` (1 or 2), `verdict` (match / partial_match / novel_valid / no_match / grading_error), `confidence` (high / medium / low — Tier 1 is always high), `reasoning` (Tier 2 only), `matched_expected_id` (which expected finding it matched, if any). See `GraderVerdict` in data-model.md for the canonical enum (including `grading_error` for Tier 2 API failures, which are excluded from all metrics).
+- **Grader Prompt**: A versioned prompt template used by the Tier 2 model-based grader. Contains: rubric, scoring criteria, few-shot examples, required output format/schema. Stored alongside golden cases and tracked in eval run metadata.
+
+### Design Notes
+
+- **DN-001 (Severity Scoring Methodology)**: Exact-match severity scoring was rejected because human inter-rater agreement on code review severity is low (Cohen's κ ≈ 0.162 per Quantum Software Engineering studies; DeepCRCEval treats severity as "supplementary and less reliable"). The adjacency-weighted approach (BUG↔WARN = 0.5, BUG↔NIT = 0.0) models severity as an ordinal scale, consistent with standard practice for ordinal classification tasks. Quadratic-weighted Cohen's kappa (`severity_qwk`) is reported as an informational companion metric. This follows the methodology used by SWR-Bench (ICSE 2025) and DeepCRCEval (2024) which both avoid hard severity matching.
+
+- **DN-002 (CI Methodology)**: Normal-approximation CIs (mean ± 1.96 × SEM) fail for small samples and bounded proportions. Wilson score intervals (Brown, Cai & DasGupta 2001) provide correct coverage for Bernoulli outcomes even at n < 20. BCa bootstrap (Efron & Tibshirani 1993) handles the bounded [0,1] nature of rate metrics without distributional assumptions. The Inspect AI eval framework (Anthropic/UK AISI) uses a similar hybrid approach.
+
+- **DN-003 (Rebuttal Accuracy Minimum Sample Size — B′ coordinator-ratified 2026-04-18)**: Wilson CI for threshold gating requires sufficient observations. When even a perfect score (n/n) at the current sample size cannot produce `ci_lower >= threshold`, the metric is tagged `method="wilson_insufficient_n"`. For the default 0.75 threshold, **12+ all-correct observations** are needed for Wilson CI to clear the gate (at n=12, `ci_lower ≈ 0.758`; at n=11, `ci_lower ≈ 0.741`). The prior "14+" figure was incorrect and was corrected during the release-phase escalation. With only 2 multi-turn golden cases, the current fixture corpus cannot satisfy this requirement.
+
+  **Semantics (B′ hybrid)**: The metric's natural `passes_threshold` flag is preserved (typically False at small n) — `passes_threshold` is **not** force-set to True. The scorecard renders the row as **INCONCLUSIVE** (never PASS) so humans reading the scorecard see the corpus-maturity state clearly. `check_thresholds(..., strict=False)` (default) treats `wilson_insufficient_n` as non-fatal, allowing small-corpus runs to pass the `--ci` gate; `check_thresholds(..., strict=True)` (opt-in via `--strict` CLI flag) treats it as a fail. The CLI also writes a stderr warning whenever an inconclusive metric is present so CI log scrapers can detect the corpus-maturity gap without parsing markdown. Rationale: keeps the scorecard honest (inconclusive ≠ PASS), defers release blocking on corpus maturity to spec 014 SH-007, and provides a strict toggle once the corpus grows. This behavior was escalated to and ratified by the coordinator in the release-phase builder/judge loop (Round 13).
 
 ## Research & Best Practices (Design Guidance)
 
@@ -248,6 +280,16 @@ These existing benchmarks can be adapted or used directly:
 | [OpenSSF CVE Benchmark](https://github.com/ossf-cve-benchmark/ossf-cve-benchmark) | 200+ real CVEs with pre/post-patch code | Extract Python-relevant cases for our security golden cases. |
 | [DeepSource Benchmark](https://deepsource.com/benchmarks) | 165 JS/TS vulnerabilities, dual-metric evaluation (detection + false positive suppression) | Adapt their dual-metric approach: test both that we catch the bug AND that we don't flag the fixed version. |
 
+### Recent Benchmarks (2025-2026)
+
+Research published after the initial draft provides additional context:
+
+| Benchmark | Key Finding | Implication for Us |
+|---|---|---|
+| [CR-Bench](https://arxiv.org/abs/2603.11078) (March 2026) | 584 defects from SWE-Bench. SNR collapses when models are pressured to find more issues (GPT-5.2: 5.11 → 1.95 under Reflexion). Best F1 ~8.83% on blind defect discovery. | SNR is critical — a noisy reviewer trains developers to ignore it. Blind defect discovery in full PRs is much harder than injected-issue benchmarks. |
+| [Qodo Benchmark](https://www.qodo.ai/blog/how-we-built-a-real-world-benchmark-for-ai-code-review/) | 100 PRs with 580 injected issues. Best F1 achieved was 60.1%. | Injected-issue benchmarks show higher F1 than blind discovery. Our thresholds (70% precision, 60% recall) are ambitious but achievable with known-issue golden cases. |
+| [Inspect AI](https://inspect.aisi.org.uk/) (UK AI Security Institute) | Task/Solver/Scorer architecture with Docker sandbox. MIT licensed. | Validates our Dataset → Runner → Scorer separation of concerns. We don't need the full framework but should follow the pattern. |
+
 ### Design Principles (from Anthropic's eval guide)
 
 These principles from [Demystifying evals for AI agents](https://www.anthropic.com/engineering/demystifying-evals-for-ai-agents) should guide our design:
@@ -278,7 +320,7 @@ Treat prompts like code: version them, track ownership, require eval approval fo
 
 ### Measurable Outcomes
 
-- **SC-001**: The eval suite runs all 20+ golden cases and produces a scorecard within 15 minutes
+- **SC-001**: The eval suite runs all 20+ golden cases and produces a scorecard within 30 minutes
 - **SC-002**: The eval suite correctly identifies a regression when the reviewer system prompt is degraded (e.g., removing the severity classification instruction causes severity accuracy to drop below threshold)
 - **SC-003**: The false positive rate on clean code cases is measurably below 20% with the default model
 - **SC-004**: A developer can add a new golden test case by creating a directory with a diff and expected.json — no code changes required

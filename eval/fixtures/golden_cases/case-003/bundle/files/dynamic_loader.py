@@ -1,0 +1,33 @@
+"""Dynamic module loader with plugin support."""
+
+from __future__ import annotations
+
+import json  # noqa: F401 -- used dynamically via importlib
+import importlib
+from typing import Any
+
+# Modules that can be loaded dynamically by name.
+ALLOWED_MODULES = {"json", "csv", "tomllib"}
+
+
+def load_module(name: str) -> Any:
+    """Load a module by name if it is in the allow-list.
+
+    Args:
+        name: The module name to load.
+
+    Returns:
+        The imported module object.
+
+    Raises:
+        ValueError: If the module name is not in ALLOWED_MODULES.
+    """
+    if name not in ALLOWED_MODULES:
+        raise ValueError(f"Module '{name}' is not allowed. Choose from: {ALLOWED_MODULES}")
+    return importlib.import_module(name)
+
+
+def parse_data(format_name: str, raw: str) -> Any:
+    """Load the appropriate parser module and parse raw data."""
+    mod = load_module(format_name)
+    return mod.loads(raw)

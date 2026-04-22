@@ -1,0 +1,6 @@
+{
+  "case_id": "case-001",
+  "description": "SQL injection vulnerability in user lookup endpoint. The query concatenates user input directly into a SQL string instead of using parameterized queries.",
+  "source": "hand_curated",
+  "tags": ["security", "python"]
+}

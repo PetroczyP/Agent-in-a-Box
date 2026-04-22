@@ -155,16 +155,14 @@ class CopilotReviewClient:
             )
 
         session_key = f"copilot-{uuid.uuid4().hex[:12]}"
-        # SDK create_session takes a config dict with on_permission_request (required),
-        # plus optional system_message and model.
-        config: dict[str, Any] = {
-            "on_permission_request": self._approve_all_permissions,
-            "system_message": system_prompt,
-        }
         resolved_model = model or self._selected_model
-        if resolved_model:
-            config["model"] = resolved_model
-        session = await self._sdk_client.create_session(config)
+        session_kwargs: dict[str, Any] = {
+            "on_permission_request": self._approve_all_permissions,
+            "system_message": {"content": system_prompt},
+        }
+        if resolved_model is not None:
+            session_kwargs["model"] = resolved_model
+        session = await self._sdk_client.create_session(**session_kwargs)
         self._sessions[session_key] = session
         return session_key
 
@@ -187,7 +185,7 @@ class CopilotReviewClient:
         try:
             if hasattr(session, "send_and_wait"):
                 event = await session.send_and_wait(
-                    {"prompt": prompt}, timeout=timeout
+                    prompt, timeout=timeout
                 )
                 return self._extract_content(event)
             elif hasattr(session, "send"):
@@ -221,9 +219,10 @@ class CopilotReviewClient:
         Tools will fail with CopilotUnavailableError when called.
         """
         try:
-            from copilot import CopilotClient
+            from copilot import CopilotClient, SubprocessConfig
 
-            self._sdk_client = CopilotClient({"github_token": self._github_token})
+            config = SubprocessConfig(github_token=self._github_token)
+            self._sdk_client = CopilotClient(config)
             await self._sdk_client.start()
 
             models = await self._sdk_client.list_models()
@@ -269,18 +268,14 @@ class CopilotReviewClient:
     def _approve_all_permissions(request: Any, invocation: Any) -> Any:
         """Permission handler that approves all SDK permission requests.
 
-        Matches the SDK's PermissionHandler.approve_all signature:
-        (request: PermissionRequest, invocation: dict) -> PermissionRequestResult.
+        Signature: (PermissionRequest, dict) -> PermissionRequestResult.
 
         The review server runs in a sandboxed Docker container with no
         filesystem access to the host. All context arrives via MCP parameters,
         so approving Copilot's internal permission requests is safe.
-
-        We try to use the SDK's PermissionRequestResult if available,
-        otherwise return a dict matching the expected shape.
         """
         try:
-            from copilot.types import PermissionRequestResult
+            from copilot.session import PermissionRequestResult
             return PermissionRequestResult(kind="approved")
         except ImportError:
             return {"kind": "approved"}
@@ -313,7 +308,7 @@ class CopilotReviewClient:
 
         unsubscribe = session.on(handler)
         try:
-            await session.send({"prompt": prompt})
+            await session.send(prompt)
             await asyncio.wait_for(idle_event.wait(), timeout=timeout)
         finally:
             unsubscribe()

@@ -1,0 +1,6 @@
+{
+  "case_id": "case-011",
+  "description": "Admin endpoint missing authentication check",
+  "source": "hand_curated",
+  "tags": ["security", "python"]
+}

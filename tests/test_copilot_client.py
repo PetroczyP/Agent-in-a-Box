@@ -153,8 +153,8 @@ class TestSessionCreation:
         assert key is not None
         assert isinstance(key, str)
 
-    async def test_create_session_passes_config_dict(self):
-        """H-1: SDK create_session takes a config dict, not kwargs."""
+    async def test_create_session_passes_kwargs(self):
+        """SDK v0.2.1: create_session takes keyword args, not a config dict."""
         client = CopilotReviewClient()
         client._connected = True
         client._selected_model = "gpt-4o"
@@ -166,13 +166,10 @@ class TestSessionCreation:
             system_prompt="You are a reviewer", model="custom-model"
         )
 
-        # Verify create_session was called with a dict, not kwargs
         call_args = client._sdk_client.create_session.call_args
-        config = call_args.args[0]
-        assert isinstance(config, dict)
-        assert callable(config["on_permission_request"])
-        assert config["system_message"] == "You are a reviewer"
-        assert config["model"] == "custom-model"
+        assert call_args.kwargs["system_message"] == {"content": "You are a reviewer"}
+        assert call_args.kwargs["model"] == "custom-model"
+        assert callable(call_args.kwargs["on_permission_request"])
 
     def test_permission_handler_matches_sdk_contract(self):
         """H-1 R5: Permission handler must accept (request, invocation) and return approved result."""

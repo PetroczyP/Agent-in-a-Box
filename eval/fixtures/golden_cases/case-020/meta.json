@@ -1,0 +1,6 @@
+{
+  "case_id": "case-020",
+  "description": "Test function with no assertions - test always passes regardless of behavior",
+  "source": "hand_curated",
+  "tags": ["tests", "python"]
+}

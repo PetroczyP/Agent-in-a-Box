@@ -1,0 +1,10 @@
+{
+  "case_id": "case-024",
+  "description": "Bug-fix PR that patches SQL injection by switching to parameterized queries. Dual-metric case.",
+  "source": "bug_fix_pr",
+  "tags": ["security", "python", "dual-metric"],
+  "dual_metric": {
+    "vulnerable_dir": "bundle",
+    "fixed_dir": "bundle-fixed"
+  }
+}

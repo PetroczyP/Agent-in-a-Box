@@ -1,0 +1,39 @@
+diff --git a/query.py b/query.py
+new file mode 100644
+index 0000000..b7f9a2e
+--- /dev/null
++++ b/query.py
+@@ -0,0 +1,34 @@
++"""Database query helpers for the product catalog."""
++
++import sqlite3
++
++
++def search_products(db_path: str, category: str, min_price: float) -> list[dict]:
++    """Search products by category and minimum price."""
++    conn = sqlite3.connect(db_path)
++    try:
++        conn.row_factory = sqlite3.Row
++        cursor = conn.execute(
++            "SELECT id, name, price, category FROM products"
++            " WHERE category = ? AND price >= ?",
++            (category, min_price),
++        )
++        return [dict(row) for row in cursor.fetchall()]
++    finally:
++        conn.close()
++
++
++def get_product_by_id(db_path: str, product_id: str) -> dict | None:
++    """Fetch a single product by its ID."""
++    conn = sqlite3.connect(db_path)
++    try:
++        conn.row_factory = sqlite3.Row
++        cursor = conn.execute(
++            "SELECT * FROM products WHERE id = ?",
++            (product_id,),
++        )
++        row = cursor.fetchone()
++        return dict(row) if row else None
++    finally:
++        conn.close()

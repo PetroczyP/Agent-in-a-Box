@@ -1,0 +1,6 @@
+{
+  "case_id": "case-002",
+  "description": "String utils with slugify, truncate, and case-conversion helpers. Production-quality with unicode handling and edge-case guards.",
+  "source": "hand_curated",
+  "tags": ["clean", "python"]
+}

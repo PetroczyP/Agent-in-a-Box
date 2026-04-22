@@ -9,3 +9,7 @@ htmlcov/
 .pytest_cache/
 .claude/settings.local.json
 .vscode/
+eval/results/
+.DS_Store
+handoff-before-clear.md
+tmp-*.md

@@ -1,0 +1,6 @@
+{
+  "case_id": "case-019",
+  "description": "God function that handles validation, database access, email sending, and logging in one method",
+  "source": "hand_curated",
+  "tags": ["design", "python"]
+}

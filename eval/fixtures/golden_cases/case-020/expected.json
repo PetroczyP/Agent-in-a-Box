@@ -1,0 +1,14 @@
+{
+  "expected_findings": [
+    {
+      "expected_id": "EF-020",
+      "rule_id": "missing-assertion",
+      "severity": "WARN",
+      "category": "tests",
+      "file": "test_parser.py",
+      "approximate_line": 8,
+      "description": "Test calls function but never asserts on the result"
+    }
+  ],
+  "expected_non_findings": []
+}

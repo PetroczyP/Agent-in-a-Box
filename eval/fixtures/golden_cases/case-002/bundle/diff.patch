@@ -1,0 +1,88 @@
+diff --git a/utils.py b/utils.py
+new file mode 100644
+index 0000000..a1b2c3d
+--- /dev/null
++++ b/utils.py
+@@ -0,0 +1,82 @@
++"""String manipulation utilities.
++
++Provides slugify, truncate, and case-conversion helpers used across
++the codebase for URL generation and display formatting.
++"""
++
++from __future__ import annotations
++
++import re
++import unicodedata
++
++
++def slugify(text: str, *, max_length: int = 80) -> str:
++    """Convert arbitrary text into a URL-safe slug.
++
++    Normalizes unicode, strips non-alphanumeric characters, collapses
++    hyphens, and enforces a maximum length.
++
++    Args:
++        text: The input string to slugify.
++        max_length: Upper bound on slug length (default 80).
++
++    Returns:
++        A lowercased, hyphen-separated slug string.
++    """
++    text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode()
++    text = re.sub(r"[^\w\s-]", "", text).strip().lower()
++    text = re.sub(r"[_\s]+", "-", text)
++    text = re.sub(r"-+", "-", text)
++    return text[:max_length].strip("-")
++
++
++def truncate(text: str, length: int = 50, suffix: str = "...") -> str:
++    """Truncate text to a maximum length with a suffix.
++
++    If the text is already within the limit, it is returned unchanged.
++    When truncation is needed, the suffix replaces the end of the string
++    so the total length equals ``length``.
++
++    Args:
++        text: The input string.
++        length: Maximum total length including suffix.
++        suffix: The truncation indicator (default ``"..."``).
++
++    Returns:
++        The original or truncated string.
++    """
++    if len(text) <= length:
++        return text
++    if length <= len(suffix):
++        return text[:length]
++    return text[: length - len(suffix)] + suffix
++
++
++def snake_to_camel(name: str) -> str:
++    """Convert a snake_case string to camelCase.
++
++    Args:
++        name: A snake_case identifier (e.g. ``"my_variable_name"``).
++
++    Returns:
++        The camelCase equivalent (e.g. ``"myVariableName"``).
++    """
++    parts = name.split("_")
++    return parts[0] + "".join(word.capitalize() for word in parts[1:])
++
++
++def camel_to_snake(name: str) -> str:
++    """Convert a camelCase string to snake_case.
++
++    Args:
++        name: A camelCase identifier (e.g. ``"myVariableName"``).
++
++    Returns:
++        The snake_case equivalent (e.g. ``"my_variable_name"``).
++    """
++    result: list[str] = []
++    for char in name:
++        if char.isupper() and result:
++            result.append("_")
++        result.append(char.lower())
++    return "".join(result)

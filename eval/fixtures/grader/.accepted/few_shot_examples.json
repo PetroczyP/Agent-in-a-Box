@@ -1,0 +1,77 @@
+[
+  {
+    "actual_finding": {
+      "rule_id": "sql-injection",
+      "severity": "BUG",
+      "category": "security",
+      "file": "app.py",
+      "line": 15,
+      "message": "User input concatenated into SQL query without parameterization."
+    },
+    "expected_findings": [
+      {
+        "expected_id": "EF-001",
+        "rule_id": "sql-injection",
+        "severity": "BUG",
+        "category": "security",
+        "file": "app.py",
+        "approximate_line": 15,
+        "description": "SQL injection via string concatenation in user lookup query."
+      }
+    ],
+    "verdict": "match",
+    "confidence": "high",
+    "matched_expected_id": "EF-001",
+    "reasoning": "The finding identifies the exact same SQL injection issue at the same file and line. Rule ID, severity, and category all match."
+  },
+  {
+    "actual_finding": {
+      "rule_id": "missing-error-handling",
+      "severity": "WARN",
+      "category": "correctness",
+      "file": "api.py",
+      "line": 42,
+      "message": "HTTP request has no timeout set, could hang indefinitely."
+    },
+    "expected_findings": [
+      {
+        "expected_id": "EF-010",
+        "rule_id": "hardcoded-secret",
+        "severity": "BUG",
+        "category": "security",
+        "file": "api.py",
+        "approximate_line": 8,
+        "description": "API key hardcoded in source file."
+      }
+    ],
+    "verdict": "novel_valid",
+    "confidence": "high",
+    "matched_expected_id": null,
+    "reasoning": "The finding identifies a real issue (missing HTTP timeout) that is not related to any expected finding. The expected finding is about a hardcoded secret on a different line. This is a genuinely useful finding that was not anticipated."
+  },
+  {
+    "actual_finding": {
+      "rule_id": "variable-naming",
+      "severity": "NIT",
+      "category": "style",
+      "file": "utils.py",
+      "line": 10,
+      "message": "Variable 'x' should have a more descriptive name."
+    },
+    "expected_findings": [
+      {
+        "expected_id": "EF-020",
+        "rule_id": "missing-docstring",
+        "severity": "NIT",
+        "category": "maintainability",
+        "file": "utils.py",
+        "approximate_line": 1,
+        "description": "Public function missing docstring."
+      }
+    ],
+    "verdict": "no_match",
+    "confidence": "high",
+    "matched_expected_id": null,
+    "reasoning": "The variable 'x' is used as a loop counter in a list comprehension where a short name is conventional and appropriate. This is noise, not a real issue. It also does not match the expected finding about a missing docstring."
+  }
+]

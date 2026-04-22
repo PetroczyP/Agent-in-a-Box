@@ -253,7 +253,12 @@ class ReviewEngine:
                 file_contents.update(msg.attached_files)
         if request.additional_files:
             file_contents.update(request.additional_files)
-        new_findings = self._parser.parse(response_text, file_contents)
+        new_findings = self._parser.parse(
+            response_text,
+            file_contents,
+            filter_low_confidence=False,
+            allow_nit_fallback=False,
+        )
         reconciled = self._reconcile_findings(session.findings, new_findings)
 
         # Step 7: Update session
@@ -366,13 +371,28 @@ class ReviewEngine:
 
         for new_f in new_findings:
             if new_f.fingerprint in existing_by_fp:
-                # Match found — update status if the new finding has a different status
+                # Match found. Propagate status changes AND content changes
+                # (severity/category/message/confidence/evidence) so valid
+                # rebuttals that downgrade a finding without dismissing it
+                # are not silently dropped (F14 / spec.md:48-49).
                 matched = existing_by_fp[new_f.fingerprint]
-                if new_f.status != FindingStatus.OPEN:
-                    # Find and update in reconciled list
+                updates: dict[str, object] = {}
+                if new_f.status != matched.status:
+                    updates["status"] = new_f.status
+                if new_f.severity != matched.severity:
+                    updates["severity"] = new_f.severity
+                if new_f.category != matched.category:
+                    updates["category"] = new_f.category
+                if new_f.message and new_f.message != matched.message:
+                    updates["message"] = new_f.message
+                if new_f.confidence != matched.confidence:
+                    updates["confidence"] = new_f.confidence
+                if new_f.evidence and new_f.evidence != matched.evidence:
+                    updates["evidence"] = new_f.evidence
+                if updates:
                     for i, f in enumerate(reconciled):
                         if f.finding_id == matched.finding_id:
-                            reconciled[i] = f.model_copy(update={"status": new_f.status})
+                            reconciled[i] = f.model_copy(update=updates)
                             break
             elif new_f.fingerprint not in seen_fps:
                 # New finding — assign next sequential ID

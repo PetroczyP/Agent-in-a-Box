@@ -1,0 +1,6 @@
+{
+  "case_id": "case-013",
+  "description": "N+1 query pattern: individual database query inside loop",
+  "source": "hand_curated",
+  "tags": ["performance", "python"]
+}

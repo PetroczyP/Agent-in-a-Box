@@ -1,0 +1,52 @@
+diff --git a/conftest.py b/conftest.py
+new file mode 100644
+index 0000000..b2c3d4e
+--- /dev/null
++++ b/conftest.py
+@@ -0,0 +1,45 @@
++"""Shared pytest fixtures for integration tests."""
++
++from __future__ import annotations
++
++from collections.abc import AsyncGenerator, Generator
++from unittest.mock import AsyncMock
++
++import httpx
++import pytest
++import pytest_asyncio
++
++
++@pytest.fixture
++def mock_db_session() -> Generator[AsyncMock, None, None]:
++    """Provide a mock async database session with commit/rollback/close."""
++    session = AsyncMock()
++    session.commit = AsyncMock()
++    session.rollback = AsyncMock()
++    session.close = AsyncMock()
++    yield session
++
++
++@pytest.fixture
++def sample_user_data() -> dict[str, str]:
++    """Return a minimal valid user payload for testing."""
++    return {
++        "username": "testuser",
++        "display_name": "Test User",
++        "email": "test@example.com",
++    }
++
++
++@pytest_asyncio.fixture
++async def mock_client() -> AsyncGenerator[httpx.AsyncClient, None]:
++    """Provide an HTTP client backed by a mock transport for unit tests."""
++    transport = httpx.MockTransport(
++        lambda request: httpx.Response(200, json={"status": "ok"})
++    )
++    async with httpx.AsyncClient(transport=transport) as client:
++        yield client
++
++
++@pytest.fixture
++def auth_headers() -> dict[str, str]:
++    """Return standard auth headers for API testing."""
++    return {"Authorization": "Bearer test-token-abc123"}
