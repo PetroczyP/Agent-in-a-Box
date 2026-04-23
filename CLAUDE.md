@@ -73,7 +73,7 @@ Specs live in `specs/NNN-feature-name/spec.md`:
 | 004 | Human Oversight (approval workflow) | Draft |
 | 005 | Model Configuration | Draft |
 | 006 | Fallback Backends (OpenAI, Anthropic, Gemini, Ollama) | Draft |
-| 007 | Eval Harness | Draft |
+| 007 | Eval Harness | Implemented |
 | 008 | Prompt Tuning for Structured Output | Implemented |
 | 009 | Slack Integration | Backlog |
 | 010 | Agent SDK Backends (Claude Agent SDK, Codex CLI) | Backlog |
